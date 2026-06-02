@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D XR HUD 互動投影系統 - 技術簡報</title>
+    <style>
+        :root {
+            --bg-color: #0a0c10;
+            --panel-bg: #12161f;
+            --cyan: #00f0ff;
+            --magenta: #ff00ff;
+            --orange: #ffaa00;
+            --green: #00ff66;
+            --text-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #1e293b;
+            padding-bottom: 1.5rem;
+        }
+
+        h1 {
+            color: var(--cyan);
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid #2e384d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid var(--cyan);
+            padding-left: 0.8rem;
+            color: #fff;
+        }
+
+        /* 互動模擬器樣式 */
+        .simulator-box {
+            text-align: center;
+        }
+
+        #canvas3d {
+            background-color: #05070a;
+            border: 2px solid var(--cyan);
+            border-radius: 6px;
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            margin: 1rem auto;
+            display: block;
+        }
+
+        .sim-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            background: transparent;
+            color: #fff;
+            border: 1px solid #475569;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            border-color: var(--cyan);
+            background: rgba(0, 240, 255, 0.1);
+        }
+
+        .btn.active {
+            background: var(--cyan);
+            color: #000;
+            border-color: var(--cyan);
+            font-weight: bold;
+        }
+
+        /* 系統指南列表 */
+        .guide-list {
+            list-style: none;
+        }
+
+        .guide-item {
+            background: rgba(255,255,255,0.02);
+            margin-bottom: 0.8rem;
+            padding: 1rem;
+            border-radius: 6px;
+            border-left: 4px solid #475569;
+        }
+
+        .guide-item.highlight-drag { border-left-color: var(--cyan); }
+        .guide-item.highlight-click { border-left-color: var(--magenta); }
+        .guide-item.highlight-switch { border-left-color: var(--orange); }
+
+        .guide-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .guide-title span {
+            float: right;
+            font-size: 0.8rem;
+            background: rgba(255,255,255,0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* 技術規格表格 */
+        .tech-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .tech-table th, .tech-table td {
+            padding: 0.6rem;
+            text-align: left;
+            border-bottom: 1px solid #2e384d;
+        }
+
+        .tech-table th {
+            color: #94a3b8;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .badge-cyan { background: rgba(0, 240, 255, 0.2); color: var(--cyan); }
+        .badge-magenta { background: rgba(255, 0, 255, 0.2); color: var(--magenta); }
+        .badge-orange { background: rgba(255, 170, 0, 0.2); color: var(--orange); }
+
+        .text-center { text-align: center; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>基於人體姿態與面部幾何之 3D XR HUD 系統</h1>
+        <div class="subtitle">Future Tech Interactive 3D XR HUD System</div>
+    </header>
+
+    <div class="container">
+        <!-- 左側：運作原理與模擬器 -->
+        <div class="panel simulator-box">
+            <h2>即時 HUD 投影模擬器 (Demo)</h2>
+            <p style="font-size: 0.9rem; color: #94a3b8;">請滑動滑鼠模擬頭部傾斜，或點擊下方按鈕切換模式</p>
+            
+            <canvas id="canvas3d"></canvas>
+            
+            <div class="sim-controls">
+                <button class="btn active" id="btn-mode0" onclick="switchMode(0)">預設模式</button>
+                <button class="btn" id="btn-mode1" onclick="switchMode(1)">臉部跟隨</button>
+                <button class="btn" id="btn-mode2" onclick="switchMode(2)">虛擬鍵盤</button>
+            </div>
+            <div style="margin-top: 1rem; font-size: 0.9rem;">
+                系統狀態: <span id="sys-status" style="color: var(--green)">SYSTEM READY</span>
+            </div>
+        </div>
+
+        <!-- 右側：操控指南與技術核心 -->
+        <div class="panel">
+            <h2>手勢交互與操控指南</h2>
+            <ul class="guide-list">
+                <li class="guide-item highlight-drag">
+                    <div class="guide-title">1. 移動與旋轉 (Drag & Rotate) <span class="badge badge-cyan">大拇指 + 食指捏合</span></div>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">捏合後移動手部，可即時推拉、旋轉或拖曳虛擬面板，進行 3D 空間重對齊。</p>
+                </li>
+                <li class="guide-item highlight-click">
+                    <div class="guide-title">2. 按鈕觸控 (Button Touch) <span class="badge badge-magenta">食指 + 中指並攏</span></div>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">以雷射指標指向面板，並攏兩指可點選 B&W / NORM / VIVID 等色彩控制項。</p>
+                </li>
+                <li class="guide-item highlight-switch">
+                    <div class="guide-title">3. 模式切換 (Mode Switch) <span class="badge badge-orange">雙手交叉持續 1.2 秒</span></div>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">交叉雙手臂，觸發 1.2 秒倒數計時，可循環切換預設、臉部跟隨、虛擬鍵盤模式。</p>
+                </li>
+            </ul>
+
+            <h2 style="margin-top: 1.5rem;">核心架構與演算法</h2>
+            <table class="tech-table">
+                <thead>
+                    <tr>
+                        <th>模組名稱</th>
+                        <th>底層技術</th>
+                        <th>關鍵演算法 / 常數</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>3D 空間定位</strong></td>
+                        <td>MediaPipe Hands (21點)</td>
+                        <td>單應性矩陣投影 (Homography), 3D 旋轉矩陣</td>
+                    </tr>
+                    <tr>
+                        <td><strong>視線與臉部追蹤</strong></td>
+                        <td>MediaPipe Face Mesh (Refine)</td>
+                        <td>瞳距估算深度 (140mm基準線), 3D 向量偏移</td>
+                    </tr>
+                    <tr>
+                        <td><strong>數據平滑濾波</strong></td>
+                        <td>One Euro Filter</td>
+                        <td>基於動態截斷頻率 (Beta=0.03/0.01) 的信號濾波</td>
+                    </tr>
+                    <tr>
+                        <td><strong>交叉手勢判定</strong></td>
+                        <td>MediaPipe Pose (11,12,15,16)</td>
+                        <td>線段交點公式 (Intersection test) & 持續時間判定</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas3d');
+        const ctx = canvas.getContext('2d');
+        let currentMode = 0;
+        let mouseX = 0, mouseY = 0;
+
+        // 初始化畫布尺寸
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 追蹤滑鼠位置，用於模擬臉部或手勢移動
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = (e.clientX - rect.left) - (canvas.width / 2);
+            mouseY = (e.clientY - rect.top) - (canvas.height / 2);
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            mouseX = 0;
+            mouseY = 0;
+        });
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.btn').forEach((btn, idx) => {
+                if(idx === mode) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+
+            const statusText = document.getElementById('sys-status');
+            if (mode === 0) {
+                statusText.innerText = "SYSTEM READY (DEFAULT)";
+                statusText.style.color = "#00ff66";
+            } else if (mode === 1) {
+                statusText.innerText = "FACE TRACKING ACTIVE";
+                statusText.style.color = "#ffaa00";
+            } else if (mode === 2) {
+                statusText.innerText = "KEYBOARD MODE ACTIVE";
+                statusText.style.color = "#ff00ff";
+            }
+        }
+
+        // 簡單的 3D 投影與框線渲染
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            // 畫背景網格
+            ctx.strokeStyle = '#111827';
+            ctx.lineWidth = 1;
+            for(let i = 0; i < canvas.width; i += 20) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+            }
+            for(let i = 0; i < canvas.height; i += 20) {
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+            }
+
+            ctx.save();
+            ctx.translate(cx, cy);
+
+            let tx = 0, ty = 0, rotY = 0;
+
+            if (currentMode === 1) {
+                // 臉部跟隨：面板稍微跟隨滑鼠偏移
+                tx = mouseX * 0.4;
+                ty = mouseY * 0.4;
+                rotY = mouseX * 0.002;
+            } else {
+                tx = 0;
+                ty = -10;
+                rotY = mouseX * 0.001; // 微動
+            }
+
+            // 模擬 3D 四邊形投射
+            const hw = 120, hh = 70;
+            let corners = [
+                {x: -hw, y: -hh}, {x: hw, y: -hh},
+                {x: hw, y: hh}, {x: -hw, y: hh}
+            ];
+
+            // 套用旋轉與平移
+            corners = corners.map(p => {
+                // 繞 Y 軸旋轉
+                let x_rot = p.x * Math.cos(rotY);
+                let z_rot = p.x * Math.sin(rotY);
+                // 平移
+                return {
+                    x: x_rot + tx,
+                    y: p.y + ty,
+                    scale: 1 + (z_rot * 0.002)
+                };
+            });
+
+            // 繪製投影面板
+            ctx.beginPath();
+            ctx.moveTo(corners[0].x * corners[0].scale, corners[0].y * corners[0].scale);
+            for(let i = 1; i < 4; i++) {
+                ctx.lineTo(corners[i].x * corners[i].scale, corners[i].y * corners[i].scale);
+            }
+            ctx.closePath();
+
+            // 依模式選擇顏色
+            let color = '#00f0ff';
+            if (currentMode === 1) color = '#ffaa00';
+            if (currentMode === 2) color = '#ff00ff';
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = color + '15'; // 半透明填滿
+            ctx.fill();
+
+            // 模擬面板內容
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            if (currentMode === 0 || currentMode === 1) {
+                ctx.fillText("X.R. PROJECTION MATRIX", tx, ty - 20);
+                ctx.fillStyle = color;
+                ctx.fillRect(tx - 40, ty + 10, 25, 12);
+                ctx.fillRect(tx - 10, ty + 10, 25, 12);
+                ctx.fillRect(tx + 20, ty + 10, 25, 12);
+                ctx.fillStyle = '#000000';
+                ctx.fillText("B&W", tx - 27, ty + 19);
+                ctx.fillText("NORM", tx + 2, ty + 19);
+                ctx.fillText("VIVID", tx + 32, ty + 19);
+            } else {
+                ctx.fillText("[ VIRTUAL KEYBOARD ]", tx, ty - 20);
+                ctx.fillText("Q W E R T Y U I O P", tx, ty);
+                ctx.fillText("A S D F G H J K L", tx, ty + 15);
+                ctx.fillText("[ SPACE ] [ DEL ] [ ENT ]", tx, ty + 30);
+            }
+
+            ctx.restore();
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>

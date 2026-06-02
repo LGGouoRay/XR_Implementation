@@ -16,7 +16,7 @@ pose = mp_pose.Pose(min_detection_confidence=0.6, min_tracking_confidence=0.6)
 C_CYAN, C_YELLOW, C_WHITE, C_RED, C_GREEN, C_BLUE, C_ORANGE, C_MAGENTA, C_PURPLE = \
     (255, 255, 0), (0, 255, 255), (255, 255, 255), (0, 0, 255), (0, 255, 0), (255, 0, 0), (0, 165, 255), (255, 0, 255), (180, 50, 200)
 
-cap = cv2.VideoCapture(2)
+cap = cv2.VideoCapture(1)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
 

@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D XR HUD 空間運算系統解析</title>
+    <!-- 引入 Tailwind CSS 以優化排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-dark-1: #030308;
+            --bg-dark-2: #05050c;
+            --bg-dark-3: #080812;
+            --accent-blue: #00f0ff;
+            --accent-orange: #ff9a00;
+            --accent-purple: #d500ff;
+            --text-main: #e0e0ff;
+            --text-muted: #8a8ca0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            color: var(--text-main);
+            position: relative;
+            background: 
+                radial-gradient(circle at bottom left, #001f54 0%, transparent 50%),
+                radial-gradient(circle at top right, #001f54 0%, transparent 30%),
+                #000000;
+            animation: gradientShift 15s ease infinite;
+        }
+
+        /* 背景渐变動畫 */
+        @keyframes gradientShift {
+            0% { background-size: 100% 100%; }
+            50% { background-size: 110% 110%; }
+            100% { background-size: 100% 100%; }
+        }
+
+        /* 噪點紋理層 */
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            opacity: 0.15;
+            mix-blend-mode: overlay;
+            animation: noiseMove 20s linear infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* 噪點紋理動畫 */
+        @keyframes noiseMove {
+            0% { transform: translate(0, 0) scale(1.1); }
+            25% { transform: translate(-2%, -2%) scale(1.05); }
+            50% { transform: translate(0, 0) scale(1.1); }
+            75% { transform: translate(2%, 2%) scale(1.05); }
+            100% { transform: translate(0, 0) scale(1.1); }
+        }
+
+        .particles-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* 霓虹呼吸發光特效 */
+        @keyframes neonGlow {
+            0%, 100% { box-shadow: 0 0 10px rgba(0, 240, 255, 0.2), inset 0 0 10px rgba(255, 154, 0, 0.1); }
+            50% { box-shadow: 0 0 20px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(255, 154, 0, 0.2); }
+        }
+        .neon-glow {
+            animation: neonGlow 3s ease-in-out infinite;
+            border: 1px solid rgba(0, 240, 255, 0.4);
+        }
+
+        /* 水印 */
+        .watermark {
+            position: fixed; top: 30px; right: 40px; font-size: 1rem; font-weight: 700;
+            color: rgba(0, 240, 255, 0.3); letter-spacing: 3px; z-index: 1000;
+            pointer-events: none; font-family: "Consolas", monospace; text-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+        }
+
+        /* 幻燈片容器 */
+        .pres-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; position: relative; z-index: 1; }
+        .slide-container { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; padding: 40px 60px; }
+        .slide {
+            position: absolute; left: 0; right: 0; top: 0; bottom: 0; margin: auto;
+            width: 100%; max-width: 1400px; height: 100%;
+            display: flex; flex-direction: column; justify-content: center;
+            opacity: 0; visibility: hidden; transform: translateX(150px) scale(0.95);
+            transition: all 0.8s cubic-bezier(0.25, 1, 0.5, 1); pointer-events: none;
+        }
+        .slide.active { opacity: 1; visibility: visible; transform: translateX(0) scale(1); pointer-events: auto; z-index: 10; }
+        .slide.prev { opacity: 0; visibility: hidden; transform: translateX(-150px) scale(0.95); }
+
+        /* 內容區塊 (置中排版) */
+        .slide-content { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+
+        /* 動畫元素等差緩入 */
+        .anim-item { opacity: 0; transform: translateY(30px); transition: all 0.8s cubic-bezier(0.25, 1, 0.5, 1); }
+        .slide.active .anim-item { opacity: 1; transform: translateY(0); }
+        .slide.active .anim-item:nth-child(1) { transition-delay: 0.1s; }
+        .slide.active .anim-item:nth-child(2) { transition-delay: 0.2s; }
+        .slide.active .anim-item:nth-child(3) { transition-delay: 0.3s; }
+        .slide.active .anim-item:nth-child(4) { transition-delay: 0.4s; }
+        .slide.active .anim-item:nth-child(5) { transition-delay: 0.5s; }
+        .slide.active .anim-item:nth-child(6) { transition-delay: 0.6s; }
+        .slide.active .anim-item:nth-child(7) { transition-delay: 0.7s; }
+
+        /* 文本樣式 */
+        .text-blue { color: var(--accent-blue); text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
+        .text-orange { color: var(--accent-orange); text-shadow: 0 0 10px rgba(255, 154, 0, 0.5); }
+        .text-purple { color: var(--accent-purple); text-shadow: 0 0 10px rgba(213, 0, 255, 0.5); }
+        .text-highlight { font-weight: 900; letter-spacing: 2px; }
+
+        .section-title { font-size: 2.8rem; font-weight: 900; margin-bottom: 25px; text-align: center; text-shadow: 0 0 15px rgba(0, 240, 255, 0.3); }
+
+        /* 程式碼區塊設計 */
+        .code-block {
+            background: #12121e; border-radius: 12px; padding: 25px 30px;
+            font-family: "Consolas", monospace; font-size: 1.15rem; line-height: 1.6;
+            position: relative; overflow: hidden; width: 100%; text-align: left;
+            border: 1px solid rgba(0, 240, 255, 0.4);
+        }
+        .code-block::before {
+            content: "PYTHON"; position: absolute; top: 0; right: 0; background: rgba(0, 240, 255, 0.2);
+            color: var(--accent-blue); font-size: 0.8rem; padding: 3px 12px; border-bottom-left-radius: 8px;
+        }
+        .code-keyword { color: var(--accent-purple); } .code-func { color: var(--accent-blue); }
+        .code-string { color: var(--accent-orange); } .code-comment { color: #5a6a7a; font-style: italic; }
+
+        /* 警告/提示框 */
+        .warning-box {
+            background: rgba(255, 154, 0, 0.1); border: 1px solid var(--accent-orange); padding: 15px 25px;
+            font-size: 1.2rem; border-radius: 8px; width: 100%; text-align: left;
+        }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.9rem; font-weight: bold; margin-right: 10px; }
+        .badge-tip { background: rgba(0, 240, 255, 0.2); color: var(--accent-blue); border: 1px solid var(--accent-blue); }
+        .badge-warn { background: rgba(255, 154, 0, 0.2); color: var(--accent-orange); border: 1px solid var(--accent-orange); }
+
+        .content-text { font-size: 1.4rem; line-height: 1.8; color: #c0c0d0; width: 100%; text-align: center; }
+
+        /* 雙欄與圖表佈局 */
+        .grid-split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 72rem; align-items: center; margin-top: 20px; }
+        .svg-container { width: 100%; display: flex; justify-content: center; align-items: center; background: rgba(18, 18, 30, 0.6); border: 1px solid rgba(213, 0, 255, 0.3); border-radius: 12px; padding: 20px; box-shadow: inset 0 0 20px rgba(213, 0, 255, 0.1); }
+        
+        .progress-bar { position: fixed; bottom: 0; left: 0; height: 4px; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple), var(--accent-orange)); transition: width 0.4s ease; z-index: 100; }
+    </style>
+</head>
+<body class="antialiased">
+    <canvas class="particles-canvas" id="particlesCanvas"></canvas>
+    <div class="pres-container">
+        <div class="watermark"> </div>
+        <div class="slide-container">
+
+            <!-- 頁面 0: 系統依賴與 MediaPipe 載入 -->
+            <div class="slide active" data-index="0">
+                <div class="slide-content">
+                    <div class="anim-item section-title">模組導入與初始化</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6 mb-6">
+                        <span class="code-keyword">import</span> cv2<br>
+                        <span class="code-keyword">import</span> mediapipe <span class="code-keyword">as</span> mp<br>
+                        <span class="code-keyword">import</span> numpy <span class="code-keyword">as</span> np<br><br>
+                        <span class="code-comment"># 建立追蹤器，設定最低偵測與追蹤信心度為 0.6 ~ 0.7</span><br>
+                        mp_hands = mp.solutions.hands<br>
+                        hands = mp_hands.Hands(min_detection_confidence=<span class="code-string">0.7</span>, min_tracking_confidence=<span class="code-string">0.7</span>)<br>
+                        face_mesh = mp.solutions.face_mesh.FaceMesh(refine_landmarks=<span class="code-keyword">True</span>)
+                    </div>
+                    <div class="anim-item warning-box neon-glow max-w-4xl">
+                        <span class="badge badge-tip">[STRATEGY]</span> 適度的信心度（0.6~0.7）能在「追蹤穩定性」與「嚴苛環境下的容錯率」之間取得最佳物理平衡，防止虛擬介面劇烈閃爍。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 1: 攝影機與解析度組態 (含針孔相機SVG) -->
+            <div class="slide" data-index="1">
+                <div class="slide-content">
+                    <div class="anim-item section-title">視訊獲取與虛擬焦距設定</div>
+                    <div class="anim-item grid-split">
+                        <div class="flex flex-col gap-6 text-left">
+                            <div class="warning-box neon-glow">
+                                <span class="badge badge-warn">[GEOMETRY]</span> 當焦距等於畫面寬度時，對應的對角線視角 (FOV) 約為 60°，完美貼近一般網路攝影機的真實物理視角。
+                            </div>
+                            <div class="code-block neon-glow">
+                                img_h, img_w, _ = frame.shape<br>
+                                focal_length = img_w<br>
+                                cx, cy = img_w / <span class="code-string">2</span>, img_h / <span class="code-string">2</span>
+                            </div>
+                        </div>
+                        <div class="svg-container neon-glow">
+                            <svg viewBox="0 0 400 200" class="w-full h-auto">
+                                <!-- 相機光心 -->
+                                <circle cx="150" cy="100" r="6" fill="#00f0ff"/>
+                                <!-- 成像平面 -->
+                                <line x1="230" y1="30" x2="230" y2="170" stroke="#d500ff" stroke-width="4"/>
+                                <!-- 投影射線 -->
+                                <line x1="50" y1="10" x2="230" y2="170" stroke="#ff9a00" stroke-width="2" stroke-dasharray="6,4"/>
+                                <line x1="50" y1="190" x2="230" y2="30" stroke="#ff9a00" stroke-width="2" stroke-dasharray="6,4"/>
+                                <!-- 標籤 -->
+                                <text x="240" y="105" fill="#e0e0ff" font-family="monospace" font-size="14">Image Plane (img_w)</text>
+                                <text x="80" y="125" fill="#00f0ff" font-family="monospace" font-size="14">Camera Origin</text>
+                                <!-- 焦距標示 -->
+                                <path d="M 150 100 L 230 100" stroke="#00f0ff" stroke-width="2"/>
+                                <text x="170" y="90" fill="#00f0ff" font-family="monospace" font-size="14">Focal Length (f)</text>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 2: 系統常數與調色盤設計 (BGR vs RGB SVG) -->
+            <div class="slide" data-index="2">
+                <div class="slide-content">
+                    <div class="anim-item section-title">色彩空間常數定義</div>
+                    <div class="anim-item grid-split">
+                        <div class="flex flex-col gap-6 text-left">
+                            <div class="code-block neon-glow">
+                                C_CYAN    = (<span class="code-string">255</span>, <span class="code-string">255</span>, <span class="code-string">0</span>)   <span class="code-comment"># 冰藍色</span><br>
+                                C_ORANGE  = (<span class="code-string">0</span>, <span class="code-string">165</span>, <span class="code-string">255</span>) <span class="code-comment"># 極光橘</span><br>
+                                C_MAGENTA = (<span class="code-string">255</span>, <span class="code-string">0</span>, <span class="code-string">255</span>)   <span class="code-comment"># 虛擬紫</span>
+                            </div>
+                        </div>
+                        <div class="svg-container neon-glow py-10">
+                            <svg viewBox="0 0 400 150" class="w-full h-auto">
+                                <defs>
+                                    <marker id="arrow-purple" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#d500ff"/></marker>
+                                </defs>
+                                <!-- RGB 結構 -->
+                                <text x="20" y="45" fill="#00f0ff" font-family="monospace" font-weight="bold">CSS (RGB)</text>
+                                <rect x="120" y="25" width="50" height="30" fill="#ff4444" stroke="#e0e0ff"/><text x="140" y="45" fill="#fff" font-family="monospace" font-weight="bold">R</text>
+                                <rect x="170" y="25" width="50" height="30" fill="#44ff44" stroke="#e0e0ff"/><text x="190" y="45" fill="#000" font-family="monospace" font-weight="bold">G</text>
+                                <rect x="220" y="25" width="50" height="30" fill="#4444ff" stroke="#e0e0ff"/><text x="240" y="45" fill="#fff" font-family="monospace" font-weight="bold">B</text>
+                                
+                                <!-- BGR 結構 -->
+                                <text x="5" y="105" fill="#d500ff" font-family="monospace" font-weight="bold">OpenCV (BGR)</text>
+                                <rect x="120" y="85" width="50" height="30" fill="#4444ff" stroke="#e0e0ff"/><text x="140" y="105" fill="#fff" font-family="monospace" font-weight="bold">B</text>
+                                <rect x="170" y="85" width="50" height="30" fill="#44ff44" stroke="#e0e0ff"/><text x="190" y="105" fill="#000" font-family="monospace" font-weight="bold">G</text>
+                                <rect x="220" y="85" width="50" height="30" fill="#ff4444" stroke="#e0e0ff"/><text x="240" y="105" fill="#fff" font-family="monospace" font-weight="bold">R</text>
+                                
+                                <!-- 翻轉箭頭 -->
+                                <path d="M 285 40 Q 310 70 285 100" stroke="#d500ff" stroke-width="2" fill="none" marker-end="url(#arrow-purple)"/>
+                                <text x="300" y="75" fill="#d500ff" font-family="monospace" font-size="12">Memory Reversed</text>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 3: 3D 旋轉數學原理 (含 Pitch Yaw Roll SVG) -->
+            <div class="slide" data-index="3">
+                <div class="slide-content">
+                    <div class="anim-item section-title">三維空間旋轉矩陣</div>
+                    <div class="anim-item grid-split">
+                        <div class="svg-container neon-glow">
+                            <svg viewBox="0 0 300 300" class="w-full h-auto">
+                                <defs>
+                                    <marker id="arrow-blue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#00f0ff"/></marker>
+                                    <marker id="arrow-orange" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ff9a00"/></marker>
+                                    <marker id="arrow-purple" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#d500ff"/></marker>
+                                </defs>
+                                <!-- Axes -->
+                                <line x1="150" y1="150" x2="260" y2="150" stroke="#00f0ff" stroke-width="3" marker-end="url(#arrow-blue)"/>
+                                <text x="210" y="140" fill="#00f0ff" font-family="monospace">X (Pitch)</text>
+                                
+                                <line x1="150" y1="150" x2="150" y2="40" stroke="#ff9a00" stroke-width="3" marker-end="url(#arrow-orange)"/>
+                                <text x="160" y="60" fill="#ff9a00" font-family="monospace">Y (Yaw)</text>
+                                
+                                <line x1="150" y1="150" x2="60" y2="240" stroke="#d500ff" stroke-width="3" marker-end="url(#arrow-purple)"/>
+                                <text x="40" y="220" fill="#d500ff" font-family="monospace">Z (Roll)</text>
+                                
+                                <!-- Rotation arcs -->
+                                <path d="M 210 135 A 15 15 0 1 1 210 165" stroke="#00f0ff" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+                                <path d="M 135 90 A 15 15 0 1 1 165 90" stroke="#ff9a00" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+                                <path d="M 100 180 A 20 20 0 1 1 80 200" stroke="#d500ff" stroke-width="2" fill="none" stroke-dasharray="4,2"/>
+                                <circle cx="150" cy="150" r="4" fill="#e0e0ff"/>
+                            </svg>
+                        </div>
+                        <div class="flex flex-col gap-4 text-left">
+                            <div class="code-block neon-glow">
+                                <span class="code-keyword">def</span> <span class="code-func">get_rotation_matrix</span>(p, y, r):<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;cx, sx = math.cos(p), math.sin(p)<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;cy, sy = math.cos(y), math.sin(y)<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;cz, sz = math.cos(r), math.sin(r)<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> np.array([<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[cy*cz + sy*sx*sz, -cy*sz + sy*sx*cz, sy*cx],<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[cx*sz,            cx*cz,             -sx],<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[-sy*cz + cy*sx*sz, sy*sz + cy*sx*cz, cy*cx]<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;])
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 4: 3D 透視投影 (project_point) -->
+            <div class="slide" data-index="4">
+                <div class="slide-content">
+                    <div class="anim-item section-title">三維到二維的透視投影</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-keyword">def</span> <span class="code-func">project_point</span>(pt, f, cx, cy):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># x = (X * f / Z) + cx</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># y = (Y * f / Z) + cy</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> (<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int((pt[<span class="code-string">0</span>] * f / pt[<span class="code-string">2</span>]) + cx),<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int((pt[<span class="code-string">1</span>] * f / pt[<span class="code-string">2</span>]) + cy)<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;) <span class="code-keyword">if</span> pt <span class="code-keyword">is not None and</span> pt[<span class="code-string">2</span>] > <span class="code-string">10.0</span> <span class="code-keyword">else None</span>
+                    </div>
+                    <div class="anim-item warning-box neon-glow max-w-4xl mt-6">
+                        <span class="badge badge-warn">[SAFETY]</span> 設定 `pt[2] > 10.0` (Z軸大於 10mm) 是為了避免物體過於靠近相機時造成 <span class="text-orange font-bold">除以零 (Divide by Zero)</span> 的數學崩潰。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 5: 2D 交叉手勢判定 (intersect) -->
+            <div class="slide" data-index="5">
+                <div class="slide-content">
+                    <div class="anim-item section-title">線段相交幾何演算法</div>
+                    <div class="anim-item grid-split">
+                        <div class="flex flex-col gap-6 text-left">
+                            <div class="code-block neon-glow text-[1rem]">
+                                <span class="code-keyword">def</span> <span class="code-func">intersect</span>(p1, p2, p3, p4):<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 計算 2D 外積</span><br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;c = <span class="code-keyword">lambda</span> o, a, b: \<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(a[<span class="code-string">0</span>] - o[<span class="code-string">0</span>]) * (b[<span class="code-string">1</span>] - o[<span class="code-string">1</span>]) - \<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(a[<span class="code-string">1</span>] - o[<span class="code-string">1</span>]) * (b[<span class="code-string">0</span>] - o[<span class="code-string">0</span>])<br>
+                                <br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> (<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(c(p3, p4, p1) * c(p3, p4, p2) < <span class="code-string">0</span>) <span class="code-keyword">and</span><br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(c(p1, p2, p3) * c(p1, p2, p4) < <span class="code-string">0</span>)<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;)
+                            </div>
+                        </div>
+                        <div class="svg-container neon-glow">
+                            <svg viewBox="0 0 300 300" class="w-full h-auto">
+                                <line x1="50" y1="50" x2="250" y2="250" stroke="#00f0ff" stroke-width="4"/>
+                                <line x1="250" y1="50" x2="50" y2="250" stroke="#ff9a00" stroke-width="4"/>
+                                <circle cx="50" cy="50" r="6" fill="#00f0ff"/><text x="35" y="40" fill="#00f0ff" font-family="monospace">P1</text>
+                                <circle cx="250" cy="250" r="6" fill="#00f0ff"/><text x="260" y="260" fill="#00f0ff" font-family="monospace">P2</text>
+                                <circle cx="250" cy="50" r="6" fill="#ff9a00"/><text x="260" y="40" fill="#ff9a00" font-family="monospace">P3</text>
+                                <circle cx="50" cy="250" r="6" fill="#ff9a00"/><text x="35" y="260" fill="#ff9a00" font-family="monospace">P4</text>
+                                <!-- Intersection point -->
+                                <circle cx="150" cy="150" r="8" fill="#d500ff"/>
+                                <text x="165" y="155" fill="#d500ff" font-family="monospace">Intersect = True</text>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 6: 雜訊控制 - 一歐元濾波器起源 (含訊號波形 SVG) -->
+            <div class="slide" data-index="6">
+                <div class="slide-content">
+                    <div class="anim-item section-title">抖動抑制：One Euro Filter</div>
+                    <div class="anim-item svg-container neon-glow max-w-5xl py-12">
+                        <svg viewBox="0 0 500 150" class="w-full h-auto">
+                            <!-- Noisy Line -->
+                            <polyline points="0,75 20,40 40,110 60,60 80,90 100,50 120,100 140,40 160,110 180,60 200,90 220,50 240,100 260,40 280,110 300,60 320,90 340,50 360,100 380,40 400,110 420,60 440,90 460,50 480,100 500,75" stroke="rgba(255,154,0,0.5)" stroke-width="2" fill="none"/>
+                            <!-- Smooth Line -->
+                            <path d="M 0,75 Q 50,70 100,75 T 200,75 T 300,75 T 400,75 T 500,75" stroke="#00f0ff" stroke-width="5" fill="none"/>
+                            <text x="20" y="25" fill="#ff9a00" font-family="monospace" font-weight="bold">Raw Data (Noisy & Jittery)</text>
+                            <text x="20" y="140" fill="#00f0ff" font-family="monospace" font-weight="bold">One Euro Filtered (Smooth & Responsive)</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 7: 一歐元濾波器代碼實現 -->
+            <div class="slide" data-index="7">
+                <div class="slide-content">
+                    <div class="anim-item section-title">一歐元濾波器數學公式與程式碼</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-keyword">def</span> <span class="code-func">__call__</span>(self, x, dt):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 計算速度 (dx)</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;self.dx_prev = a_d * ((x - self.x_prev) / dt) + (<span class="code-string">1.0</span> - a_d) * self.dx_prev<br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 依據速度動態調整截止頻率</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;cutoff = self.mincutoff + self.beta * math.hypot(*self.dx_prev)<br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 計算平滑權重 a 並更新位置</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;a = <span class="code-string">1.0</span> / (<span class="code-string">1.0</span> + <span class="code-string">1.0</span> / (<span class="code-string">2</span> * math.pi * cutoff * dt))<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;self.x_prev = a * x + (<span class="code-string">1.0</span> - a) * self.x_prev<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> self.x_prev
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 8: 雙手交叉偵測器初始化 -->
+            <div class="slide" data-index="8">
+                <div class="slide-content">
+                    <div class="anim-item section-title">CrossGestureDetector 類別設計</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-keyword">class</span> <span class="code-func">CrossGestureDetector</span>:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">def</span> <span class="code-func">__init__</span>(self, hold_duration=<span class="code-string">1.2</span>):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.hold_duration = hold_duration<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self._reset()<br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">def</span> <span class="code-func">_reset</span>(self):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.cross_start_time = <span class="code-string">0</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.last_seen_time = <span class="code-string">0</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.is_crossing = <span class="code-keyword">False</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.progress = <span class="code-string">0.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 9: 交叉手勢動態計時邏輯 -->
+            <div class="slide" data-index="9">
+                <div class="slide-content">
+                    <div class="anim-item section-title">CrossGestureDetector 的時序判定</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-keyword">if</span> intersect(p1, p2, p3, p4) <span class="code-keyword">and</span> math.hypot(p2[<span class="code-string">0</span>]-p4[<span class="code-string">0</span>], ...) < limit:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;now = time.time()<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if not</span> self.is_crossing:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.cross_start_time, self.is_crossing = now, <span class="code-keyword">True</span><br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;self.last_seen_time = now<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;self.progress = min((now - self.cross_start_time) / self.hold_duration, <span class="code-string">1.0</span>)<br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> self.progress >= <span class="code-string">1.0</span>:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.just_triggered = <span class="code-keyword">True</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self._reset()<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return True</span>, <span class="code-string">1.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 10: 臉部追蹤器幾何原理 (FaceTracker) -->
+            <div class="slide" data-index="10">
+                <div class="slide-content">
+                    <div class="anim-item section-title">FaceTracker 類別與深度 Z 軸估算</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-comment"># 點 234 (左頰) 與 454 (右頰) 在影像上的像素距離</span><br>
+                        cheek_dist = math.hypot(<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;(lm[<span class="code-string">234</span>].x - lm[<span class="code-string">454</span>].x) * img_w,<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;(lm[<span class="code-string">234</span>].y - lm[<span class="code-string">454</span>].y) * img_h<br>
+                        )<br>
+                        <br>
+                        <span class="code-comment"># 透過標準臉寬 140mm 與焦距，反推絕對深度 Z_base (mm)</span><br>
+                        Z_base = (self.AVERAGE_FACE_WIDTH_MM * f) / max(cheek_dist, <span class="code-string">1.0</span>)
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 11: 臉部 3D 姿態向量計算 (含人臉向量 SVG) -->
+            <div class="slide" data-index="11">
+                <div class="slide-content">
+                    <div class="anim-item section-title">頭部姿態：法法向量計算</div>
+                    <div class="anim-item grid-split">
+                        <div class="svg-container neon-glow">
+                            <svg viewBox="0 0 300 300" class="w-full h-auto">
+                                <defs>
+                                    <marker id="arrow-blue-face" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#00f0ff"/></marker>
+                                    <marker id="arrow-orange-face" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ff9a00"/></marker>
+                                </defs>
+                                <!-- Face outline -->
+                                <ellipse cx="140" cy="150" rx="70" ry="90" stroke="#8a8ca0" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+                                <!-- Points -->
+                                <circle cx="140" cy="80" r="5" fill="#00f0ff"/><text x="110" y="70" fill="#00f0ff" font-family="monospace">10</text>
+                                <circle cx="140" cy="220" r="5" fill="#00f0ff"/><text x="110" y="240" fill="#00f0ff" font-family="monospace">152</text>
+                                <circle cx="80" cy="150" r="5" fill="#ff9a00"/><text x="40" y="155" fill="#ff9a00" font-family="monospace">234</text>
+                                <circle cx="200" cy="150" r="5" fill="#ff9a00"/><text x="215" y="155" fill="#ff9a00" font-family="monospace">454</text>
+                                <!-- Vectors -->
+                                <line x1="140" y1="220" x2="140" y2="90" stroke="#00f0ff" stroke-width="3" marker-end="url(#arrow-blue-face)"/>
+                                <text x="150" y="110" fill="#00f0ff" font-family="monospace">v_up</text>
+                                <line x1="80" y1="150" x2="190" y2="150" stroke="#ff9a00" stroke-width="3" marker-end="url(#arrow-orange-face)"/>
+                                <text x="100" y="140" fill="#ff9a00" font-family="monospace">v_right</text>
+                                <!-- Forward vector -->
+                                <circle cx="140" cy="150" r="15" stroke="#d500ff" stroke-width="3" fill="none"/>
+                                <circle cx="140" cy="150" r="5" fill="#d500ff"/>
+                                <text x="165" y="175" fill="#d500ff" font-family="monospace">v_forward (Out)</text>
+                            </svg>
+                        </div>
+                        <div class="flex flex-col gap-4 text-left">
+                            <div class="code-block neon-glow text-[1rem]">
+                                <span class="code-comment"># 取兩組特徵點建立基礎向量</span><br>
+                                v_up = pts[<span class="code-string">10</span>] - pts[<span class="code-string">152</span>]<br>
+                                v_right = pts[<span class="code-string">454</span>] - pts[<span class="code-string">234</span>]<br>
+                                <br>
+                                <span class="code-comment"># 正規化與正交化處理...</span><br>
+                                <br>
+                                <span class="code-comment"># 外積求朝前向量</span><br>
+                                v_forward = np.cross(v_right, v_up)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 12: 3D 四邊形貼圖渲染 (含透視 SVG) -->
+            <div class="slide" data-index="12">
+                <div class="slide-content">
+                    <div class="anim-item section-title">單應性與透視變換 (Homography)</div>
+                    <div class="anim-item svg-container neon-glow max-w-3xl mt-6">
+                        <svg viewBox="0 0 500 250" class="w-full h-auto">
+                            <!-- 2D Plane -->
+                            <rect x="30" y="60" width="120" height="120" stroke="#00f0ff" stroke-width="3" fill="rgba(0,240,255,0.1)"/>
+                            <text x="50" y="125" fill="#00f0ff" font-family="monospace">2D Canvas</text>
+                            
+                            <!-- Arrow -->
+                            <path d="M 180 120 L 260 120" stroke="#e0e0ff" stroke-width="3" fill="none" stroke-dasharray="5,5"/>
+                            <polygon points="260,115 270,120 260,125" fill="#e0e0ff"/>
+                            <text x="175" y="110" fill="#e0e0ff" font-family="monospace" font-size="12">warpPerspective(H)</text>
+                            
+                            <!-- 3D Plane -->
+                            <polygon points="320,40 480,80 430,220 290,160" stroke="#d500ff" stroke-width="3" fill="rgba(213,0,255,0.1)"/>
+                            <text x="330" y="130" fill="#d500ff" font-family="monospace">3D Projection</text>
+                            
+                            <!-- Corner connections -->
+                            <line x1="150" y1="60" x2="480" y2="80" stroke="#8a8ca0" stroke-width="1" stroke-dasharray="4,4"/>
+                            <line x1="30" y1="180" x2="290" y2="160" stroke="#8a8ca0" stroke-width="1" stroke-dasharray="4,4"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 13: 單應性變換實作細節 -->
+            <div class="slide" data-index="13">
+                <div class="slide-content">
+                    <div class="anim-item section-title">warpPerspective 實作細節</div>
+                    <div class="anim-item warning-box neon-glow max-w-4xl mb-6">
+                        <span class="badge badge-warn">[RUNTIME SAFETY]</span> 為防止計算錯誤崩潰，必須先使用 `cv2.isContourConvex` 確認投影後的四邊形沒有自我交叉（例如翻轉到相機背面時）。
+                    </div>
+                    <div class="anim-item code-block neon-glow max-w-4xl">
+                        <span class="code-comment"># 取得四個 2D 投影點 (img_corners)</span><br>
+                        <span class="code-keyword">if not</span> cv2.isContourConvex(img_corners):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> frame<br>
+                        <br>
+                        <span class="code-comment"># 計算單應性矩陣 H</span><br>
+                        H, _ = cv2.findHomography(src_corners, img_corners)<br>
+                        <br>
+                        <span class="code-comment"># 執行透視變換並套用 Mask 混合回主畫面</span><br>
+                        warped = cv2.warpPerspective(canvas, H, (w, h))<br>
+                        warped_mask = cv2.warpPerspective(mask, H, (w, h))<br>
+                        blended = cv2.addWeighted(warped, alpha, frame, <span class="code-string">1-alpha</span>, <span class="code-string">0</span>)
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 14: 虛擬螢幕與拖曳狀態機 (SciFiScreen3D) -->
+            <div class="slide" data-index="14">
+                <div class="slide-content">
+                    <div class="anim-item section-title">3D 位姿拖曳狀態管線</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-keyword">if</span> is_pinching:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if not</span> screen.is_dragging <span class="code-keyword">and</span> math.hypot(*(pinch_mid - screen.T)) < <span class="code-string">250.0</span>:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;screen.is_dragging = <span class="code-keyword">True</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;screen.drag_start_hand_pos = pinch_mid.copy()<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;screen.drag_start_screen_pos = screen.T.copy()<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> screen.is_dragging:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 新位置 = 原始位置 + (手部當前位置 - 手部起始位置)</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;screen.target_T = screen.drag_start_screen_pos + \<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(pinch_mid - screen.drag_start_hand_pos)
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 15: 虛擬螢幕二維 UI 渲染 -->
+            <div class="slide" data-index="15">
+                <div class="slide-content">
+                    <div class="anim-item section-title">HUD 控制面板畫布繪製</div>
+                </div>
+            </div>
+
+            <!-- 頁面 16: 手部 3D 關節提取 (含手部骨架 SVG) -->
+            <div class="slide" data-index="16">
+                <div class="slide-content">
+                    <div class="anim-item section-title">手部空間姿態解析</div>
+                    <div class="anim-item grid-split">
+                        <div class="svg-container neon-glow">
+                            <svg viewBox="0 0 300 300" class="w-full h-auto">
+                                <defs>
+                                    <marker id="arrow-blue-hand" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#00f0ff"/></marker>
+                                    <marker id="arrow-orange-hand" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ff9a00"/></marker>
+                                </defs>
+                                <!-- Palm outline -->
+                                <path d="M 120 220 L 100 120 L 130 90 L 160 90 L 190 100 L 200 220 Z" stroke="#8a8ca0" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+                                <!-- Points -->
+                                <circle cx="150" cy="220" r="6" fill="#e0e0ff"/><text x="165" y="230" fill="#e0e0ff" font-family="monospace">0 (Wrist)</text>
+                                <circle cx="150" cy="110" r="6" fill="#00f0ff"/><text x="145" y="95" fill="#00f0ff" font-family="monospace">9</text>
+                                <circle cx="110" cy="120" r="6" fill="#ff9a00"/><text x="90" y="115" fill="#ff9a00" font-family="monospace">5</text>
+                                <circle cx="190" cy="125" r="6" fill="#ff9a00"/><text x="205" y="125" fill="#ff9a00" font-family="monospace">17</text>
+                                <!-- Vectors -->
+                                <line x1="150" y1="220" x2="150" y2="120" stroke="#00f0ff" stroke-width="3" marker-end="url(#arrow-blue-hand)"/>
+                                <text x="160" y="160" fill="#00f0ff" font-family="monospace">v_up</text>
+                                <line x1="110" y1="120" x2="180" y2="125" stroke="#ff9a00" stroke-width="3" marker-end="url(#arrow-orange-hand)"/>
+                                <text x="135" y="145" fill="#ff9a00" font-family="monospace">v_right</text>
+                            </svg>
+                        </div>
+                        <div class="flex flex-col gap-4 text-left">
+                            <div class="code-block neon-glow text-[1rem]">
+                                <span class="code-comment"># 向上向量 (中指根 9 - 腕 0)</span><br>
+                                v_up = pts_3d[<span class="code-string">9</span>] - pts_3d[<span class="code-string">0</span>]<br><br>
+                                <span class="code-comment"># 向右向量 (小指根 17 - 食指根 5)</span><br>
+                                v_right = pts_3d[<span class="code-string">17</span>] - pts_3d[<span class="code-string">5</span>]<br><br>
+                                <span class="code-comment"># 外積求手掌法向量 (朝前)</span><br>
+                                v_forward = np.cross(v_right, v_up)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 17: 虛擬鍵盤佈局設計 -->
+            <div class="slide" data-index="17">
+                <div class="slide-content">
+                    <div class="anim-item section-title">空中鍵盤佈局設計</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        self.rows = [list(<span class="code-string">"QWERTYUIOP"</span>), list(<span class="code-string">"ASDFGHJKL"</span>), ...]<br>
+                        self.key_rects = []<br>
+                        <br>
+                        <span class="code-keyword">for</span> r_idx, row <span class="code-keyword">in</span> enumerate(self.rows):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;y = margin_y + r_idx * (key_h + gap)<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;kw = (total_w - gap * (n - <span class="code-string">1</span>)) // n<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">for</span> k_idx, lbl <span class="code-keyword">in</span> enumerate(row):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 將每個按鍵的 (X, Y, W, H, Label) 存入列表</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.key_rects.append((x, y, kw, key_h, lbl))
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 18: 虛擬鍵盤的點擊與緩衝區 -->
+            <div class="slide" data-index="18">
+                <div class="slide-content">
+                    <div class="anim-item section-title">空中觸控與字元追加</div>
+                    <div class="anim-item warning-box neon-glow max-w-4xl mb-6">
+                        <span class="badge badge-tip">[UX DESIGN]</span> 加入 <span class="text-orange font-bold">冷卻時間 (Cooldown)</span> 機制：避免在 3D 空間中因為手部微小抖動，導致一次點擊產生連續多個相同字元的誤觸。
+                    </div>
+                    <div class="anim-item code-block neon-glow max-w-4xl">
+                        <span class="code-keyword">for</span> x, y, width, height, lbl <span class="code-keyword">in</span> self.key_rects:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> x < cx_x < x + width <span class="code-keyword">and</span> y < cx_y < y + height:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.hover_key = lbl<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 確認捏合且過了冷卻時間</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> is_im_pinched <span class="code-keyword">and</span> (now - self.key_cooldown > <span class="code-string">0.4</span>):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.key_cooldown[lbl] = now<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.pressed_key = lbl<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.typed_text += lbl<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">break</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 19: 主程式核心執行管線 -->
+            <div class="slide" data-index="19">
+                <div class="slide-content">
+                    <div class="anim-item section-title">主程式核心：多模型協同運算</div>
+                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
+                        <span class="code-keyword">while</span> cap.isOpened():<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;ret, frame = cap.read()<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;results = hands.process(rgb_frame) <span class="code-comment"># 每幀皆追蹤手部 (關鍵互動)</span><br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 每 3 幀才進行一次重度 Pose 推理 (優化效能)</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;frame_count += <span class="code-string">1</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> frame_count % <span class="code-string">3</span> == <span class="code-string">0</span>:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pose_results = pose.process(rgb_frame)<br>
+                        <br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># 依據 current_mode 狀態機，動態切換繪製 Screen 或 Keyboard</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">if</span> current_mode == <span class="code-string">2</span>:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;frame = render_quad_3d(..., virtual_keyboard, ...)<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">else</span>:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;frame = render_quad_3d(..., my_screen_3d, ...)
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 20: 結語 -->
+            <div class="slide" data-index="20">
+                <div class="slide-content">
+                    <div class="anim-item text-7xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#00f0ff] to-[#d500ff] drop-shadow-[0_0_25px_rgba(213,0,255,0.8)] tracking-widest">
+                        謝謝大家
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="progress-bar" id="progress"></div>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+
+        function updateSlide() {
+            slides.forEach((slide, index) => {
+                slide.classList.remove('active', 'prev');
+                if (index === currentSlide) {
+                    slide.classList.add('active');
+                } else if (index < currentSlide) {
+                    slide.classList.add('prev');
+                }
+            });
+            document.getElementById('progress').style.width = ((currentSlide + 1) / totalSlides * 100) + '%';
+        }
+
+        function nextSlide() { if (currentSlide < totalSlides - 1) { currentSlide++; updateSlide(); } }
+        function prevSlide() { if (currentSlide > 0) { currentSlide--; updateSlide(); } }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); nextSlide(); }
+            else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prevSlide(); }
+        });
+
+        let wheelTimeout;
+        document.addEventListener('wheel', (e) => {
+            if (wheelTimeout) return;
+            if (e.deltaY > 0) nextSlide(); else if (e.deltaY < 0) prevSlide();
+            wheelTimeout = setTimeout(() => { wheelTimeout = null; }, 600);
+        });
+
+        let touchStartX = 0, touchEndX = 0;
+        document.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; });
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (Math.abs(touchStartX - touchEndX) > 50) {
+                if (touchStartX - touchEndX > 0) nextSlide(); else prevSlide();
+            }
+        });
+
+        // Click to navigate (Left half = prev, Right half = next)
+        document.addEventListener('click', (e) => {
+            // Ignore click if user is selecting/highlighting text
+            if (window.getSelection().toString() !== "") return;
+            
+            const halfWidth = window.innerWidth / 2;
+            if (e.clientX > halfWidth) {
+                nextSlide();
+            } else {
+                prevSlide();
+            }
+        });
+
+        updateSlide();
+
+        // Particles Animation
+        class Particles {
+            constructor() {
+                this.canvas = document.getElementById('particlesCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.particles = [];
+                this.colors = [
+                    '#00f0ff', '#d500ff', '#ff9a00', '#00a8ff',
+                    '#5c00ff', '#1a3a8a', '#00f0ff', '#d500ff'
+                ];
+                this.resizeCanvas();
+                this.createParticles();
+                this.animate();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+
+            createParticles() {
+                this.particles = [];
+                const particleCount = Math.floor(window.innerWidth * window.innerHeight / 15000);
+                
+                for (let i = 0; i < particleCount; i++) {
+                    this.particles.push({
+                        x: Math.random() * this.canvas.width,
+                        y: Math.random() * this.canvas.height,
+                        size: Math.random() * 3 + 1,
+                        speedX: (Math.random() - 0.5) * 0.8,
+                        speedY: (Math.random() - 0.5) * 0.8,
+                        color: this.colors[Math.floor(Math.random() * this.colors.length)],
+                        opacity: Math.random() * 0.5 + 0.1,
+                        pulse: Math.random() * Math.PI * 2
+                    });
+                }
+            }
+
+            updateParticles() {
+                this.particles.forEach(particle => {
+                    particle.x += particle.speedX;
+                    particle.y += particle.speedY;
+                    particle.pulse += 0.02;
+
+                    if (particle.x < 0 || particle.x > this.canvas.width) {
+                        particle.speedX *= -1;
+                    }
+                    if (particle.y < 0 || particle.y > this.canvas.height) {
+                        particle.speedY *= -1;
+                    }
+                });
+            }
+
+            drawParticles() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                this.particles.forEach(particle => {
+                    const pulseFactor = 0.8 + Math.sin(particle.pulse) * 0.2;
+                    
+                    this.ctx.save();
+                    this.ctx.globalAlpha = particle.opacity;
+                    this.ctx.fillStyle = particle.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(particle.x, particle.y, particle.size * pulseFactor, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Draw glow effect
+                    this.ctx.shadowColor = particle.color;
+                    this.ctx.shadowBlur = 15;
+                    this.ctx.fill();
+                    this.ctx.shadowBlur = 0;
+                    
+                    this.ctx.restore();
+                });
+            }
+
+            animate() {
+                this.updateParticles();
+                this.drawParticles();
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        // Initialize particles when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new Particles();
+        });
+    </script>
+</body>
+</html>

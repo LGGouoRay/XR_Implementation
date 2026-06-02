@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>未來科技 3D XR HUD 系統簡報</title>
+    
+    <!-- 引入 Tailwind CSS 進行極大化客製與版面設定 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 FontAwesome 作為平面圖標替換 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- 引入科技感字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Noto+Sans+TC:wght@300;400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind 自定義設定 (發光、特殊顏色、字型) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'xr-cyan': '#00FFFF',
+                        'xr-magenta': '#FF00FF',
+                        'xr-green': '#00FF00',
+                        'xr-yellow': '#FFFF00',
+                        'xr-orange': '#FFA500',
+                        'xr-dark': '#050a0f',
+                        'xr-surface': '#0a1622',
+                    },
+                    fontFamily: {
+                        'orbitron': ['Orbitron', 'sans-serif'],
+                        'tech': ['Share Tech Mono', 'monospace'],
+                        'noto': ['Noto Sans TC', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'neon-cyan': '0 0 10px #00FFFF, 0 0 20px #00FFFF, inset 0 0 10px #00FFFF',
+                        'neon-magenta': '0 0 10px #FF00FF, 0 0 20px #FF00FF, inset 0 0 10px #FF00FF',
+                        'neon-green': '0 0 10px #00FF00, 0 0 20px #00FF00, inset 0 0 10px #00FF00',
+                        'neon-orange': '0 0 10px #FFA500, 0 0 20px #FFA500, inset 0 0 10px #FFA500',
+                    },
+                    textShadow: {
+                        'cyan': '0 0 8px #00FFFF, 0 0 15px #00FFFF',
+                        'magenta': '0 0 8px #FF00FF, 0 0 15px #FF00FF',
+                        'orange': '0 0 8px #FFA500, 0 0 15px #FFA500',
+                        'green': '0 0 8px #00FF00, 0 0 15px #00FF00',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* ===================================================================== */
+        /* 1. 基礎與全局重置 */
+        /* ===================================================================== */
+        body {
+            background-color: #050a0f;
+            color: #ffffff;
+            overflow: hidden; /* 禁止捲軸，單頁全螢幕 Dashboard */
+            user-select: none;
+            /* 科技感虛擬網格背景 */
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center;
+            width: 100vw;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            position: relative;
+        }
+
+        /* 文字發光公用類 */
+        .text-glow-cyan { text-shadow: 0 0 10px #00FFFF, 0 0 20px #00FFFF; }
+        .text-glow-magenta { text-shadow: 0 0 10px #FF00FF, 0 0 20px #FF00FF; }
+        .text-glow-orange { text-shadow: 0 0 10px #FFA500, 0 0 20px #FFA500; }
+        
+        /* 框體發光公用類 */
+        .box-glow-cyan { box-shadow: 0 0 10px #00FFFF, inset 0 0 10px rgba(0,255,255,0.4); border: 1px solid #00FFFF; }
+        .box-glow-magenta { box-shadow: 0 0 10px #FF00FF, inset 0 0 10px rgba(255,0,255,0.4); border: 1px solid #FF00FF; }
+        .box-glow-orange { box-shadow: 0 0 10px #FFA500, inset 0 0 10px rgba(255,165,0,0.4); border: 1px solid #FFA500; }
+
+        /* 半透明科技玻璃展板 */
+        .glass-panel {
+            background: rgba(5, 10, 15, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.05), inset 0 0 15px rgba(0, 255, 255, 0.03);
+            position: relative;
+            z-index: 10;
+        }
+
+        /* 雷射漣漪按鈕效果 */
+        .btn-xr {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .btn-xr::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 5px; height: 5px;
+            background: rgba(255, 255, 255, 0.6);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%, -50%);
+            transform-origin: 50% 50%;
+        }
+        .btn-xr:focus:not(:active)::after {
+            animation: ripple 0.8s ease-out;
+        }
+        @keyframes ripple {
+            0% { transform: scale(0, 0); opacity: 0.8; }
+            100% { transform: scale(50, 50); opacity: 0; }
+        }
+
+        /* 視差 Tilt 容器 */
+        .tilt-container {
+            perspective: 1200px;
+            transform-style: preserve-3d;
+            width: 100%; height: 100%;
+            position: absolute;
+        }
+        .tilt-content {
+            transform: translateZ(50px);
+            transition: transform 0.1s ease-out; /* 用於滑鼠追隨時的平滑 */
+        }
+
+        /* 持續 Y 軸旋轉展示 */
+        @keyframes swing-y {
+            0% { transform: perspective(1000px) rotateY(-15deg); }
+            100% { transform: perspective(1000px) rotateY(15deg); }
+        }
+        .auto-swing {
+            animation: swing-y 15s infinite alternate ease-in-out;
+            transform-style: preserve-3d;
+        }
+
+        /* ===================================================================== */
+        /* 2. 動畫細節 (Animations) */
+        /* ===================================================================== */
+
+        /* 螢幕頂層掃描線 */
+        .scanlines::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            z-index: 999;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* 閃爍動畫 (模式切換) */
+        @keyframes screen-flash {
+            0% { background: rgba(0, 255, 0, 0); }
+            50% { background: rgba(0, 255, 0, 0.4); }
+            100% { background: rgba(0, 255, 0, 0); }
+        }
+        .flash-active {
+            animation: screen-flash 0.5s ease-out forwards;
+        }
+
+        /* Boot 序列碼滾動 */
+        @keyframes boot-scroll {
+            0% { transform: translateY(100%); }
+            100% { transform: translateY(-50%); }
+        }
+
+        /* 雷達掃描轉圈 */
+        @keyframes radar-spin {
+            form { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .radar-sweep {
+            animation: radar-spin 3s linear infinite;
+        }
+
+        /* 開機載入視窗 */
+        #boot-screen {
+            position: fixed;
+            inset: 0;
+            background-color: #030508;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 5rem;
+            transition: opacity 0.8s ease-in-out;
+        }
+
+        .boot-code {
+            color: #00FF00;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 14px;
+            white-space: pre;
+            text-shadow: 0 0 5px #00FF00;
+            height: 50vh;
+            overflow: hidden;
+            position: relative;
+        }
+        .boot-code-inner {
+            position: absolute;
+            bottom: 0;
+            animation: boot-scroll 5s linear forwards;
+        }
+
+        /* PPT 頁面轉場緩入特效 */
+        .ppt-page {
+            position: absolute;
+            inset: 0;
+            padding: 4rem 6rem;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .ppt-page.active {
+            display: flex;
+        }
+
+        /* 元素緩入：順序出現 */
+        .slide-element {
+            opacity: 0;
+            transform: translateY(40px) scale(0.95);
+            transition: all 0.8s cubic-bezier(0.25, 1, 0.3, 1);
+        }
+        .slide-element.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        /* 延遲時間定義 */
+        .delay-100 { transition-delay: 0.1s; }
+        .delay-200 { transition-delay: 0.2s; }
+        .delay-300 { transition-delay: 0.3s; }
+        .delay-400 { transition-delay: 0.4s; }
+        .delay-500 { transition-delay: 0.5s; }
+        .delay-600 { transition-delay: 0.6s; }
+        .delay-700 { transition-delay: 0.7s; }
+        .delay-800 { transition-delay: 0.8s; }
+
+        /* ===================================================================== */
+        /* 3. 程式碼展現區 (Code Highlighting) */
+        /* ===================================================================== */
+        .code-container {
+            background-color: #080d12;
+            border-left: 4px solid #00FFFF;
+            font-family: 'Share Tech Mono', monospace;
+            padding: 1.5rem;
+            border-radius: 4px;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            position: relative;
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+        .syntax-keyword { color: #FF00FF; font-weight: bold; }
+        .syntax-def { color: #0088FF; font-weight: bold; }
+        .syntax-string { color: #00FF00; }
+        .syntax-comment { color: #666666; font-style: italic; }
+        .syntax-number { color: #FFA500; }
+        
+        .code-highlight {
+            background-color: rgba(0, 255, 255, 0.2);
+            color: #00FFFF;
+            padding: 0 4px;
+            border-radius: 2px;
+            text-shadow: 0 0 5px #00FFFF;
+            font-weight: bold;
+        }
+
+        /* ===================================================================== */
+        /* 4. 模式切換模擬器 (1.2s 圓環進度) */
+        /* ===================================================================== */
+        #mode-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #mode-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.05s linear, stroke 0.3s ease;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* ===================================================================== */
+        /* 5. 虛擬虛線流動箭頭 (架構圖) */
+        /* ===================================================================== */
+        @keyframes dash-flow {
+            to { stroke-dashoffset: -20; }
+        }
+        .flow-line {
+            stroke-dasharray: 5 5;
+            animation: dash-flow 0.5s linear infinite;
+        }
+
+        /* 虛擬 3D 鍵盤個別按鍵按壓效果 */
+        .kb-key {
+            transition: all 0.1s;
+        }
+        .kb-key:active {
+            transform: translateZ(-10px) scale(0.9);
+            box-shadow: 0 0 5px var(--magenta);
+        }
+
+        /* 二次元科技少女預留框 */
+        .anime-placeholder {
+            position: fixed;
+            bottom: -50px;
+            right: 0;
+            width: 500px;
+            height: 80vh;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400"><path fill="%2300FFFF" opacity="0.1" d="M100 50 C70 50 50 80 50 110 C50 140 70 180 100 200 C130 180 150 140 150 110 C150 80 130 50 100 50 Z M80 200 L40 380 L160 380 L120 200 Z"/><path fill="none" stroke="%2300FFFF" stroke-width="2" opacity="0.3" d="M100 50 C70 50 50 80 50 110 C50 140 70 180 100 200 C130 180 150 140 150 110 C150 80 130 50 100 50 Z M80 200 L40 380 L160 380 L120 200 Z"/></svg>') no-repeat bottom right;
+            background-size: contain;
+            pointer-events: none;
+            z-index: 5; /* 在背景之上，但低於頁面內容 */
+            filter: drop-shadow(0 0 10px rgba(0,255,255,0.3));
+        }
+
+        /* 全局 SVG 背景層 */
+        .svg-bg {
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100vw; height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.3;
+        }
+
+    </style>
+</head>
+<body class="scanlines">
+
+    <!-- 全局背景裝飾 SVG -->
+    <svg class="svg-bg" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50%" cy="50%" r="350" fill="none" stroke="#FF00FF" stroke-width="1" opacity="0.2" stroke-dasharray="10 20" />
+        <circle cx="50%" cy="50%" r="500" fill="none" stroke="#00FFFF" stroke-width="2" opacity="0.1" />
+        <!-- 對角線雷射 -->
+        <line x1="0" y1="0" x2="100%" y2="100%" stroke="#00FFFF" stroke-width="1" opacity="0.05" />
+        <line x1="100%" y1="0" x2="0" y2="100%" stroke="#FF00FF" stroke-width="1" opacity="0.05" />
+    </svg>
+
+    <!-- 看板娘 / 二次元科幻風裝飾 (僅在首頁顯示較明顯) -->
+    <div class="anime-placeholder" id="anime-girl"></div>
+
+    <!-- 右上角系統狀態提示 (含顏文字) -->
+    <div class="fixed top-8 right-10 z-50 text-right font-tech">
+        <div class="text-xr-cyan text-2xl text-glow-cyan mb-1 animate-pulse" id="sys-status">
+            (•̀ᴗ•́)و ➔ SYSTEM READY
+        </div>
+        <div class="text-gray-400 text-lg">VIDEO SAT: <span class="text-xr-yellow">1.0x</span> <span class="mx-2">|</span> DEPTH: <span class="text-xr-cyan">450.0</span> mm</div>
+        <div class="text-xr-magenta text-md mt-1 animate-bounce">Press <span class="font-bold border border-xr-magenta px-1 rounded">[SPACE]</span> hold 1.2s to Mode Switch</div>
+    </div>
+
+    <!-- 左下角/右下角修飾 -->
+    <div class="fixed bottom-6 left-8 z-50 text-gray-500 font-tech text-sm opacity-50">
+        SYS_VER: 6.0_BETA // OpenCV: ACTIVATED // MediaPipe: SYNCED
+    </div>
+
+    <!-- 底部控制導航 (鍵盤箭頭提示) -->
+    <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex space-x-12 z-50 text-xr-cyan font-orbitron text-xl opacity-70">
+        <div class="w-32 text-right"><i class="fa-solid fa-angles-left"></i> PREV</div>
+        <div id="page-indicator" class="font-bold text-glow-cyan">PAGE 1 / 5</div>
+        <div class="w-32 text-left">NEXT <i class="fa-solid fa-angles-right"></i></div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- Boot 啟動畫面 -->
+    <!-- ============================================== -->
+    <div id="boot-screen">
+        <div class="flex items-center mb-8">
+            <i class="fa-solid fa-microchip text-5xl text-xr-cyan text-glow-cyan animate-spin mr-6" style="animation-duration: 3s;"></i>
+            <h1 class="text-4xl font-orbitron text-xr-cyan text-glow-cyan font-bold tracking-widest">
+                ➔ 未來科技 3D XR HUD 系統正在啟動...
+            </h1>
+        </div>
+        <!-- 代碼流動區域 -->
+        <div class="boot-code" id="boot-code-container">
+            <div class="boot-code-inner" id="boot-code-text"></div>
+        </div>
+        <!-- 進度條 -->
+        <div class="mt-6 flex justify-between font-tech text-xr-green text-xl">
+            <span>MEM: ALLOCATING TENSORS...</span>
+            <span id="boot-percent">0%</span>
+        </div>
+        <div class="w-full h-2 bg-gray-900 mt-2 rounded overflow-hidden">
+            <div class="h-full bg-xr-cyan box-glow-cyan transition-all duration-75" id="boot-fill" style="width: 0%;"></div>
+        </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 幻燈片主容器 (PPT Container) 支援 3D Tilt -->
+    <!-- ============================================== -->
+    <div id="ppt-container" class="tilt-container hidden z-10 relative">
+
+        <!-- ============== 頁面 1: 首頁 (Dashboard) ============== -->
+        <div class="ppt-page tilt-content active" id="slide-1">
+            <div class="flex h-full w-full">
+                <!-- 左側：標題與架構流動圖 -->
+                <div class="w-1/2 flex flex-col justify-center pr-12 slide-element delay-100">
+                    <h1 class="text-7xl font-orbitron font-black text-xr-cyan text-glow-cyan mb-8 leading-tight">
+                        3D <span class="text-xr-magenta text-glow-magenta">XR HUD</span><br>SYSTEM
+                    </h1>
+                    <p class="text-2xl text-gray-300 font-noto font-light mb-12 italic border-l-4 border-xr-cyan pl-6 bg-gray-900 bg-opacity-50 py-4 rounded">
+                        "將 Python 邏輯昇華為全息立體視覺前端展示"<br>
+                        <span class="text-xr-green">(✧∀✧) 全境解析・實體交互搭載完成。</span>
+                    </p>
+                    
+                    <!-- 動態架構圖 -->
+                    <div class="glass-panel p-8 w-full relative">
+                        <h3 class="text-xr-green font-tech text-2xl mb-6 flex items-center">
+                            <i class="fa-solid fa-sitemap mr-3"></i> SYSTEM ARCHITECTURE
+                        </h3>
+                        
+                        <div class="flex items-center justify-between relative mt-10">
+                            <!-- SVG 動態虛線 -->
+                            <svg class="absolute top-1/2 left-0 w-full h-8 -translate-y-1/2 z-0">
+                                <line x1="0" y1="16" x2="100%" y2="16" stroke="#00FFFF" stroke-width="2" class="flow-line" opacity="0.6" />
+                            </svg>
+                            
+                            <div class="z-10 bg-xr-dark p-6 rounded-full border-2 border-xr-cyan box-glow-cyan text-center w-32 h-32 flex flex-col justify-center slide-element delay-300">
+                                <i class="fa-solid fa-video text-4xl text-xr-cyan mb-2"></i>
+                                <div class="font-tech text-xs">Video I/O</div>
+                            </div>
+                            
+                            <div class="z-10 bg-xr-dark p-6 rounded-full border-2 border-xr-magenta box-glow-magenta text-center w-32 h-32 flex flex-col justify-center slide-element delay-500">
+                                <i class="fa-solid fa-hand-dots text-4xl text-xr-magenta mb-2"></i>
+                                <div class="font-tech text-xs leading-tight">Mediapipe<br>Track</div>
+                            </div>
+                            
+                            <div class="z-10 bg-xr-dark p-6 rounded-full border-2 border-xr-orange box-glow-orange text-center w-32 h-32 flex flex-col justify-center slide-element delay-700">
+                                <i class="fa-solid fa-cube text-4xl text-xr-orange mb-2"></i>
+                                <div class="font-tech text-xs leading-tight">3D<br>Transform</div>
+                            </div>
+                            
+                            <div class="z-10 bg-xr-dark p-6 rounded-full border-2 border-xr-green box-glow-green text-center w-32 h-32 flex flex-col justify-center slide-element delay-900">
+                                <i class="fa-solid fa-vr-cardboard text-4xl text-xr-green mb-2"></i>
+                                <div class="font-tech text-xs leading-tight">HUD<br>Render</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：模式列表卡片 -->
+                <div class="w-1/2 flex flex-col justify-center pl-10">
+                    <h2 class="text-4xl font-orbitron text-white mb-8 slide-element delay-200">
+                        <i class="fa-solid fa-layer-group mr-3 text-xr-cyan"></i>CORE MODULES
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <!-- MODE 0 -->
+                        <div class="glass-panel p-6 flex items-center hover:scale-105 transition-transform slide-element delay-400 border-l-8 border-xr-cyan cursor-pointer btn-xr">
+                            <i class="fa-solid fa-desktop text-5xl text-xr-cyan w-20 text-center"></i>
+                            <div>
+                                <h3 class="text-3xl font-orbitron font-bold text-xr-cyan mb-2">MODE 0: DEFAULT</h3>
+                                <p class="text-gray-300 text-lg">固定於空間中的全息控制面板與儀表板預設視圖</p>
+                            </div>
+                        </div>
+                        
+                        <!-- MODE 1 -->
+                        <div class="glass-panel p-6 flex items-center hover:scale-105 transition-transform slide-element delay-600 border-l-8 border-xr-orange cursor-pointer btn-xr">
+                            <i class="fa-solid fa-user-astronaut text-5xl text-xr-orange w-20 text-center"></i>
+                            <div>
+                                <h3 class="text-3xl font-orbitron font-bold text-xr-orange mb-2">MODE 1: FACE FOLLOW</h3>
+                                <p class="text-gray-300 text-lg">基於 <code>FaceTracker</code> 的智能視角跟隨，動態重算透視矩陣</p>
+                            </div>
+                        </div>
+
+                        <!-- MODE 2 -->
+                        <div class="glass-panel p-6 flex items-center hover:scale-105 transition-transform slide-element delay-800 border-l-8 border-xr-magenta cursor-pointer btn-xr">
+                            <i class="fa-regular fa-keyboard text-5xl text-xr-magenta w-20 text-center"></i>
+                            <div>
+                                <h3 class="text-3xl font-orbitron font-bold text-xr-magenta mb-2">MODE 2: VIRTUAL KB</h3>
+                                <p class="text-gray-300 text-lg">3D 空間渲染虛擬鍵盤，精確指尖碰撞偵測輸入</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============== 頁面 2: 操作指南 (Gestures) ============== -->
+        <div class="ppt-page tilt-content" id="slide-2">
+            <h1 class="text-5xl font-orbitron font-black text-white mb-16 text-center w-full slide-element delay-100">
+                <i class="fa-solid fa-hand-sparkles mr-4 text-xr-cyan text-glow-cyan"></i>INTERACTION GUIDELINES
+            </h1>
+            
+            <div class="flex justify-between space-x-10 h-full">
+                <!-- 指尖捏合拖曳 -->
+                <div class="w-1/3 glass-panel p-10 flex flex-col items-center text-center slide-element delay-300 group hover:border-xr-cyan transition-colors">
+                    <div class="w-40 h-40 rounded-full border-2 border-xr-cyan box-glow-cyan flex items-center justify-center mb-8 relative">
+                        <div class="absolute inset-0 radar-sweep border-t-4 border-xr-cyan rounded-full opacity-50"></div>
+                        <i class="fa-solid fa-hand-pointer text-6xl text-xr-cyan"></i>
+                    </div>
+                    <h3 class="text-4xl font-bold text-white mb-4">DRAG & ROTATE</h3>
+                    <div class="text-xr-cyan text-xl mb-6 font-tech bg-xr-dark px-4 py-2 rounded border border-xr-cyan w-full">dist(thumb, index) < 0.25</div>
+                    <p class="text-gray-300 text-xl leading-loose">
+                        大拇指與食指指尖捏合。<br>
+                        啟動 <span class="code-highlight">3D 空間拖曳</span> 功能。<br>
+                        同步改變面板的 座標與旋轉。
+                    </p>
+                </div>
+
+                <!-- 指尖並攏點擊 -->
+                <div class="w-1/3 glass-panel p-10 flex flex-col items-center text-center slide-element delay-500 group hover:border-xr-magenta transition-colors">
+                    <div class="w-40 h-40 rounded-full border-2 border-xr-magenta box-glow-magenta flex items-center justify-center mb-8 relative">
+                        <div class="absolute inset-0 radar-sweep border-t-4 border-xr-magenta rounded-full opacity-50" style="animation-direction: reverse; animation-duration: 2s;"></div>
+                        <i class="fa-solid fa-location-crosshairs text-6xl text-xr-magenta"></i>
+                    </div>
+                    <h3 class="text-4xl font-bold text-white mb-4">SYSTEM CLICK</h3>
+                    <div class="text-xr-magenta text-xl mb-6 font-tech bg-xr-dark px-4 py-2 rounded border border-xr-magenta w-full">laser_hit_2d(intersect)</div>
+                    <p class="text-gray-300 text-xl leading-loose">
+                        食指單點向前凸出。<br>
+                        經過 <span class="code-highlight">仿射變換投影</span> 計算座標。<br>
+                        精確點擊 3D 面板按鈕。
+                    </p>
+                </div>
+
+                <!-- 雙手交叉切換 -->
+                <div class="w-1/3 glass-panel p-10 flex flex-col items-center text-center slide-element delay-700 group hover:border-xr-green transition-colors">
+                    <div class="w-40 h-40 rounded-full border-2 border-xr-green box-glow-green flex items-center justify-center mb-8 relative">
+                        <div class="absolute inset-0 border-4 border-dashed border-xr-green rounded-full animate-spin" style="animation-duration: 4s;"></div>
+                        <i class="fa-solid fa-xmark text-7xl text-xr-green text-glow-green"></i>
+                    </div>
+                    <h3 class="text-4xl font-bold text-white mb-4">CROSS SWITCH</h3>
+                    <div class="text-xr-green text-xl mb-6 font-tech bg-xr-dark px-4 py-2 rounded border border-xr-green w-full">hold_duration > 1.2s</div>
+                    <p class="text-gray-300 text-xl leading-loose">
+                        雙臂交叉呈現 X 狀持續秒。<br>
+                        觸發 <span class="code-highlight">模式切換光環</span> 機制。<br>
+                        循環切換三大操作狀態。
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============== 頁面 3: 核心演算法 (Algorithms) ============== -->
+        <div class="ppt-page tilt-content" id="slide-3">
+            <h1 class="text-5xl font-orbitron font-black text-xr-cyan text-glow-cyan mb-12 slide-element delay-100">
+                <i class="fa-solid fa-code-branch mr-4"></i>ALGORITHM ENGINE
+            </h1>
+            
+            <div class="flex h-full space-x-12">
+                <!-- 左側：濾波器與投影 -->
+                <div class="w-1/2 flex flex-col space-y-8">
+                    <!-- One Euro Filter -->
+                    <div class="glass-panel p-8 slide-element delay-300 flex-1">
+                        <h3 class="text-3xl font-bold text-xr-magenta text-glow-magenta mb-4"><i class="fa-solid fa-filter mr-3"></i>1€ Filter (One Euro)</h3>
+                        <p class="text-gray-300 text-lg mb-4">實時降低高頻抖動，保留高速響應，大幅提升面板拖曳平滑度。</p>
+                        <div class="code-container text-base box-glow-magenta">
+<span class="syntax-keyword">class</span> <span class="syntax-def">OneEuroFilter</span>:
+    <span class="syntax-keyword">def</span> __init__(self, mincutoff=<span class="syntax-number">1.0</span>, beta=<span class="syntax-number">0.007</span>):
+        <span class="syntax-comment"># 動態調整截止頻率以對應速度</span>
+        self.mincutoff, self.beta = mincutoff, beta
+
+    <span class="syntax-keyword">def</span> __call__(self, x, dt):
+        <span class="syntax-comment"># 計算動態截止頻率 Cutoff</span>
+        cutoff = self.mincutoff + self.beta * math.hypot(*self.dx)
+        <span class="code-highlight">a = 1.0 / (1.0 + 1.0 / (2 * math.pi * cutoff * dt))</span>
+        <span class="syntax-keyword">return</span> a * x + (<span class="syntax-number">1.0</span> - a) * self.prev_x
+                        </div>
+                    </div>
+
+                    <!-- Rotation Matrix -->
+                    <div class="glass-panel p-8 slide-element delay-500 flex-1">
+                        <h3 class="text-3xl font-bold text-xr-green text-glow-green mb-4"><i class="fa-solid fa-cube mr-3"></i>3D Rotation Matrix</h3>
+                        <div class="code-container text-base box-glow-green">
+<span class="syntax-keyword">def</span> <span class="syntax-def">get_rotation_matrix</span>(pitch, yaw, roll):
+    <span class="syntax-comment"># 尤拉角轉旋轉矩陣 (Euler to R)</span>
+    cx, sx = math.cos(p), math.sin(p)
+    cy, sy = math.cos(y), math.sin(y)
+    
+    <span class="code-highlight"><span class="syntax-keyword">return</span> np.array([
+        [cy*cz+sy*sx*sz, -cy*sz+sy*sx*cz, sy*cx],
+        [cx*sz,          cx*cz,          -sx],
+        [-sy*cz+cy*sx*sz, sy*sz+cy*sx*cz, cy*cx]
+    ])</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：數學 3D 渲染與透視區 -->
+                <div class="w-1/2 glass-panel p-8 slide-element delay-700 flex flex-col">
+                    <h3 class="text-3xl font-bold text-xr-cyan text-glow-cyan mb-4"><i class="fa-solid fa-cubes mr-3"></i>Render Quad 3D Pipeline</h3>
+                    <p class="text-gray-300 text-lg mb-8">利用 OpenCV <code>warpPerspective</code> 以及 <code>findHomography</code> 執行三維仿射空間變換與渲染。</p>
+                    
+                    <!-- 持續 3D 展現區域 -->
+                    <div class="flex-grow flex items-center justify-center relative overflow-hidden bg-xr-dark rounded-xl border-2 border-xr-cyan box-glow-cyan p-4 perspect-box auto-swing">
+                        
+                        <!-- 背景格線 -->
+                        <div class="absolute inset-0 opacity-20" style="background-image: linear-gradient(#00FFFF 1px, transparent 1px), linear-gradient(90deg, #00FFFF 1px, transparent 1px); background-size: 20px 20px;"></div>
+
+                        <div class="w-80 h-56 border-2 border-xr-cyan bg-xr-cyan bg-opacity-20 text-center flex flex-col justify-center shadow-neon-cyan relative transform transition-transform overflow-hidden">
+                            <div class="absolute inset-0 flex items-center justify-center opacity-30">
+                                <i class="fa-solid fa-cubes text-9xl text-xr-cyan"></i>
+                            </div>
+                            <h4 class="text-4xl font-orbitron font-bold tracking-widest text-xr-cyan z-10 text-glow-cyan">UI CANVAS</h4>
+                            <p class="font-tech text-xl mt-4 z-10 text-white bg-black bg-opacity-50 inline-block px-2">pts_3d = local_pts @ R.T + T</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============== 頁面 4: 實體互動 (Interaction) ============== -->
+        <div class="ppt-page tilt-content" id="slide-4">
+            <h1 class="text-5xl font-orbitron font-black text-xr-orange text-glow-orange mb-16 slide-element delay-100 text-right w-full">
+                INTERACTION & RENDER <i class="fa-solid fa-layer-group ml-4"></i>
+            </h1>
+
+            <div class="grid grid-cols-2 gap-12 h-full">
+                <!-- UI 飽和度調變 -->
+                <div class="glass-panel p-10 slide-element delay-300 flex flex-col justify-center border-t-8 border-xr-orange">
+                    <h3 class="text-4xl font-bold text-white mb-6">Color Saturation Mod</h3>
+                    <p class="text-2xl text-gray-300 mb-10 border-l-4 border-xr-orange pl-6 bg-gray-900 bg-opacity-70 p-6 rounded">
+                        利用 <code>cv2.cvtColor</code> 轉換至 <code>HSV</code> 空間，針對系統面板飽和度 (S) 進行實時調變。
+                    </p>
+                    <div class="flex justify-between space-x-6">
+                        <button class="btn-xr flex-1 py-8 border-2 border-gray-500 text-gray-400 font-orbitron text-2xl font-bold rounded">B&W (0.0)</button>
+                        <button class="btn-xr flex-1 py-8 border-2 border-xr-cyan text-xr-cyan box-glow-cyan font-orbitron text-2xl font-bold text-glow-cyan rounded">NORM (1.0)</button>
+                        <button class="btn-xr flex-1 py-8 border-2 border-xr-magenta text-xr-magenta box-glow-magenta font-orbitron text-2xl font-bold text-glow-magenta rounded">VIVID (2.5)</button>
+                    </div>
+                </div>
+
+                <!-- 碰撞檢測與射線 -->
+                <div class="glass-panel p-10 slide-element delay-500 relative flex flex-col justify-center border-t-8 border-xr-orange">
+                    <div class="absolute top-6 right-6 text-9xl opacity-10 text-xr-orange"><i class="fa-solid fa-crosshairs"></i></div>
+                    <h3 class="text-4xl font-bold text-white mb-6 z-10">Raycast Hit Detection</h3>
+                    <div class="code-container text-lg mb-6 box-glow-orange z-10" style="border-left-color: #FFA500;">
+<span class="syntax-def">local_pt</span> = get_rotation_matrix(*screen.rot).<span class="syntax-keyword">T</span>.dot(
+    index_tip_3d - screen.T
+)
+u, v, w = local_pt
+<span class="syntax-keyword">if</span> -hw < u < hw <span class="syntax-keyword">and</span> -hh < v < hh:
+    <span class="syntax-comment"># 驗證 Z 軸深度距離，防誤觸</span>
+    <span class="syntax-keyword">if</span> -30.0 <= w <= 80.0:
+        <span class="code-highlight">trigger_hover_or_click()</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============== 頁面 5: 虛擬鍵盤 (Keyboard) ============== -->
+        <div class="ppt-page tilt-content" id="slide-5">
+            <h1 class="text-5xl font-orbitron font-black text-xr-magenta text-glow-magenta mb-8 text-center w-full slide-element delay-100">
+                <i class="fa-regular fa-keyboard mr-4"></i>VIRTUAL 3D KEYBOARD
+            </h1>
+            
+            <p class="text-center text-2xl text-gray-300 font-tech mb-12 slide-element delay-200 bg-gray-900 bg-opacity-50 py-3 mx-auto w-1/2 rounded border border-gray-700">
+                // 部署於 3D 世界中的全息輸入裝置 [ MODE: 2 ] //
+            </p>
+
+            <!-- Keyboard Render 3D Base -->
+            <div class="flex justify-center items-center w-full h-[60%] slide-element delay-400" style="perspective: 1500px;">
+                <div class="w-[900px] h-[450px] glass-panel border-2 border-xr-magenta box-glow-magenta p-8 flex flex-col rounded-2xl transform rotate-x-12 auto-swing shadow-2xl relative" style="transform: rotateX(25deg);">
+                    
+                    <!-- 輸入框 -->
+                    <div class="w-full h-20 bg-black border-2 border-xr-cyan rounded-md mb-8 flex items-center px-6 box-glow-cyan text-glow-cyan text-4xl font-tech tracking-widest text-xr-cyan">
+                        INPUT> 3D_XR_HUD_SYSTEM<span class="animate-pulse ml-1">_</span>
+                    </div>
+
+                    <!-- 鍵盤列 QWERTY DOM Build -->
+                    <div class="flex justify-center space-x-3 mb-4">
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">Q</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">W</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">E</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">R</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">T</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">Y</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">U</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">I</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">O</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">P</div>
+                    </div>
+                    <div class="flex justify-center space-x-3 mb-4">
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">A</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">S</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">D</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">F</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">G</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">H</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">J</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">K</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">L</div>
+                    </div>
+                    <div class="flex justify-center space-x-3 mb-4">
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">Z</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">X</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">C</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">V</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">B</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">N</div>
+                        <div class="kb-key w-16 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">M</div>
+                    </div>
+                    <div class="flex justify-center space-x-6 mt-2">
+                        <div class="kb-key w-96 h-16 border-2 border-xr-magenta box-glow-magenta rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-magenta hover:text-white transition-colors cursor-pointer text-xr-magenta">SPACE</div>
+                        <div class="kb-key w-32 h-16 border-2 border-xr-orange box-glow-orange rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-orange hover:text-white transition-colors cursor-pointer text-xr-orange">DEL</div>
+                        <div class="kb-key w-40 h-16 border-2 border-xr-green box-glow-green rounded bg-gray-900 bg-opacity-80 flex items-center justify-center font-orbitron font-bold text-3xl hover:bg-xr-green hover:text-white transition-colors cursor-pointer text-xr-green">ENTER</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================== -->
+    <!-- Mode Switch Simulator (Cross Hands 1.2s) -->
+    <!-- ============================================== -->
+    <div id="mode-overlay">
+        <div class="flex flex-col items-center justify-center relative">
+            <!-- 進度環 SVG -->
+            <svg width="400" height="400" class="relative z-10">
+                <!-- 底環 -->
+                <circle cx="200" cy="200" r="160" fill="none" stroke="#222" stroke-width="20" />
+                <!-- 動態進度環 -->
+                <circle id="mode-ring" cx="200" cy="200" r="160" fill="none" stroke="#00FFFF" stroke-width="20" stroke-linecap="round"
+                    class="progress-ring__circle"
+                    stroke-dasharray="1005.3" stroke-dashoffset="1005.3" />
+            </svg>
+            
+            <div class="absolute inset-0 flex flex-col items-center justify-center z-20 text-center font-orbitron">
+                <div class="text-white text-3xl tracking-widest mb-4 font-bold text-shadow-orange">MODE SWITCH</div>
+                <div class="text-xr-cyan text-5xl font-black mb-2 animate-pulse text-glow-cyan" id="mode-target-text">FACE FOLLOW</div>
+                <div class="text-white text-2xl font-tech mt-2 bg-black px-4 py-1 rounded" id="mode-timer-text">1.2s</div>
+            </div>
+            
+            <div class="w-[500px] h-8 bg-gray-900 mt-12 rounded border-2 border-gray-600 relative overflow-hidden">
+                <div id="mode-bar" class="absolute top-0 left-0 h-full bg-xr-cyan" style="width: 0%; box-shadow: 0 0 20px #00FFFF;"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ============================================== -->
+    <!-- 控制邏輯 JavaScript -->
+    <!-- ============================================== -->
+    <script>
+        // ==========================================
+        // 1. Boot Screen Logic (系統啟動加載 3 秒)
+        // ==========================================
+        const bootScreen = document.getElementById('boot-screen');
+        const pptContainer = document.getElementById('ppt-container');
+        const codeText = document.getElementById('boot-code-text');
+        const percentText = document.getElementById('boot-percent');
+        const bootFill = document.getElementById('boot-fill');
+        
+        // 偽造的 Python Boot Log 輸出
+        const dummyCode = `import cv2
+import mediapipe as mp
+import numpy as np
+import time, math
+
+print("➔ 未來科技 3D XR HUD 系統已啟動！")
+print("Initializing Camera Capture IDX 2...")
+cap = cv2.VideoCapture(2)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(min_detection_confidence=0.7)
+mp_face = mp.solutions.face_mesh
+mp_pose = mp.solutions.pose
+... Allocating GPU tensors for FaceTracker
+... Loading 3D Rotation Matrices (get_rotation_matrix)
+... Calibrating OneEuroFilters (mincutoff=1.0, beta=0.007)
+
+=> CROSS GESTURE DETECTOR ARMED
+=> VIRTUAL KEYBOARD CANVAS ALLOCATED
+
+=> SYSTEM KERNEL LOADED SUCCESSFULLY
+=> WAITING FOR BINDING...
+`;
+        // 將代碼重複加入多次製造大量滾動效果
+        codeText.innerText = dummyCode.repeat(15);
+
+        let loadProgress = 0;
+        let bootInterval = setInterval(() => {
+            loadProgress += Math.floor(Math.random() * 6) + 2; 
+            if(loadProgress >= 100) loadProgress = 100;
+            
+            percentText.innerText = loadProgress + '%';
+            bootFill.style.width = loadProgress + '%';
+            
+            if(loadProgress === 100) {
+                clearInterval(bootInterval);
+                setTimeout(() => {
+                    bootScreen.style.opacity = '0';
+                    setTimeout(() => {
+                        bootScreen.style.display = 'none';
+                        // 啟動幻燈片第一頁
+                        pptContainer.classList.remove('hidden');
+                        showPage(0);
+                    }, 800);
+                }, 800); // 完成後停頓 0.8s
+            }
+        }, 60);
+
+        // ==========================================
+        // 2. PPT Paging Logic (純前端簡報換頁機制)
+        // ==========================================
+        const pages = document.querySelectorAll('.ppt-page');
+        const pageIndicator = document.getElementById('page-indicator');
+        let currentPage = 0;
+
+        function showPage(index) {
+            pages.forEach((page, i) => {
+                const elements = page.querySelectorAll('.slide-element');
+                // 隱藏非目標頁
+                if (i !== index) {
+                    page.classList.remove('active');
+                    elements.forEach(el => el.classList.remove('visible'));
+                }
+            });
+            
+            // 顯示目標頁
+            const targetPage = pages[index];
+            targetPage.classList.add('active');
+            
+            // 依次觸發貝氏曲線緩入動畫
+            const elements = targetPage.querySelectorAll('.slide-element');
+            setTimeout(() => {
+                elements.forEach(el => el.classList.add('visible'));
+            }, 50);
+
+            pageIndicator.innerText = `PAGE ${index + 1} / ${pages.length}`;
+            
+            // 看板娘只在第一頁與第二頁明顯
+            const anime = document.getElementById('anime-girl');
+            if(index === 0) anime.style.opacity = '1';
+            else anime.style.opacity = '0.3';
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if(bootScreen.style.display !== 'none') return;
+            
+            // 左右方向鍵翻頁
+            if (e.key === 'ArrowRight') {
+                currentPage = (currentPage + 1) % pages.length;
+                showPage(currentPage);
+            } else if (e.key === 'ArrowLeft') {
+                currentPage = (currentPage - 1 + pages.length) % pages.length;
+                showPage(currentPage);
+            }
+        });
+
+        // ==========================================
+        // 3. Mouse Hover 3D Tilt Logic (模擬 Face Follow)
+        // ==========================================
+        // 捕捉滑鼠移動事件，改變視差透視
+        document.addEventListener('mousemove', (e) => {
+            if(bootScreen.style.display !== 'none') return;
+            
+            // 計算畫面比例 (0 ~ 1)
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+            
+            // 轉換為角度：-15 ~ +15 度
+            const rotateY = (x - 0.5) * 30; 
+            const rotateX = -(y - 0.5) * 30; 
+            
+            // 對所有標記為 tilt-content 的容器加上即時透視轉向
+            document.querySelectorAll('.tilt-content').forEach(content => {
+                content.style.transform = `translateZ(50px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+            });
+        });
+
+        // ==========================================
+        // 4. Mode Switch Simulator (Cross Hands 1.2s 動畫)
+        // ==========================================
+        const modeOverlay = document.getElementById('mode-overlay');
+        const modeRing = document.getElementById('mode-ring');
+        const modeBar = document.getElementById('mode-bar');
+        const modeTimerText = document.getElementById('mode-timer-text');
+        const modeTargetText = document.getElementById('mode-target-text');
+        const sysStatus = document.getElementById('sys-status');
+        
+        let spacePressed = false;
+        let pressStartTime = 0;
+        
+        // 系統常數
+        const HOLD_DURATION = 1200; // 1.2 秒
+        const CIRCUMFERENCE = 2 * Math.PI * 160; // 進度環圓周長 (r=160 -> 1005.3)
+        
+        const modes = ["DEFAULT", "FACE FOLLOW", "KEYBOARD"];
+        const modeColors = ["#00FFFF", "#FFA500", "#FF00FF"];
+        const kaomojis = ["(•̀ᴗ•́)و", "(✧∀✧)", "(￣^￣)ゞ"];
+        let currentModeIdx = 0;
+
+        function updateProgress() {
+            if(!spacePressed) return;
+            const elapsed = Date.now() - pressStartTime;
+            let progress = Math.min(elapsed / HOLD_DURATION, 1.0);
+            
+            // 更新 SVG 圓環 (Dashoffset) 與進度條
+            const offset = CIRCUMFERENCE - (progress * CIRCUMFERENCE);
+            modeRing.style.strokeDashoffset = offset;
+            modeBar.style.width = (progress * 100) + '%';
+            
+            // 更新倒數文字
+            const timeLeft = Math.max(0, (HOLD_DURATION - elapsed) / 1000).toFixed(1);
+            modeTimerText.innerText = timeLeft + 's';
+
+            // 色彩過渡機制模擬 Python 進度轉換
+            const nextModeIdx = (currentModeIdx + 1) % 3;
+            if (progress > 0.5) {
+                modeRing.style.stroke = modeColors[nextModeIdx];
+                modeBar.style.backgroundColor = modeColors[nextModeIdx];
+                modeBar.style.boxShadow = `0 0 20px ${modeColors[nextModeIdx]}`;
+            }
+
+            // 完成切換
+            if(progress >= 1.0) {
+                spacePressed = false;
+                currentModeIdx = nextModeIdx;
+                
+                // 觸發全螢幕 Flash 閃爍特效
+                document.body.classList.add('flash-active');
+                setTimeout(() => document.body.classList.remove('flash-active'), 500);
+
+                // 更新右上角狀態欄
+                sysStatus.innerText = `${kaomojis[currentModeIdx]} ➔ MODE: ${modes[currentModeIdx]}`;
+                sysStatus.style.color = modeColors[currentModeIdx];
+                sysStatus.style.textShadow = `0 0 10px ${modeColors[currentModeIdx]}`;
+
+                // 關閉模擬器 UI
+                setTimeout(hideModeOverlay, 300);
+            } else {
+                requestAnimationFrame(updateProgress);
+            }
+        }
+
+        function hideModeOverlay() {
+            modeOverlay.classList.remove('active');
+            // 回復初始狀態以備下次使用
+            setTimeout(() => {
+                modeRing.style.strokeDashoffset = CIRCUMFERENCE;
+                modeBar.style.width = '0%';
+                modeRing.style.stroke = "#00FFFF";
+                modeBar.style.backgroundColor = "#00FFFF";
+            }, 300);
+        }
+
+        // 監聽空白鍵觸發 (KeyDown)
+        document.addEventListener('keydown', (e) => {
+            if(bootScreen.style.display !== 'none') return;
+            // 避免翻頁鍵觸發，專注空白鍵
+            if (e.code === 'Space' && !spacePressed) {
+                spacePressed = true;
+                pressStartTime = Date.now();
+                
+                modeOverlay.classList.add('active');
+                modeTargetText.innerText = modes[(currentModeIdx + 1) % 3];
+                modeTargetText.style.color = modeColors[(currentModeIdx + 1) % 3];
+                modeTargetText.style.textShadow = `0 0 15px ${modeColors[(currentModeIdx + 1) % 3]}`;
+                
+                requestAnimationFrame(updateProgress);
+            }
+        });
+
+        // 取消觸發 (KeyUp)
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && spacePressed) {
+                spacePressed = false; 
+                hideModeOverlay();
+            }
+        });
+
+    </script>
+</body>
+</html>
