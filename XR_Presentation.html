@@ -172,7 +172,7 @@
                     <div class="anim-item grid-split">
                         <div class="flex flex-col gap-6 text-left">
                             <div class="warning-box neon-glow">
-                                <span class="badge badge-warn">[GEOMETRY]</span> 當焦距等於畫面寬度時，對應的對角線視角 (FOV) 約為 60°，完美貼近一般網路攝影機的真實物理視角。
+                                <span class="badge badge-warn">[GEOMETRY]</span> 當焦距等於畫面寬度時，對應的對角線視角約為 60°，完美貼近一般網路攝影機的真實物理視角。
                             </div>
                             <div class="code-block neon-glow">
                                 img_h, img_w, _ = frame.shape<br>
@@ -196,10 +196,10 @@
                 </div>
             </div>
 
-            <!-- 頁面 1: 三維空間旋轉矩陣 (原頁面 3) -->
+            <!-- 頁面 1: 三維空間旋轉與透視投影 -->
             <div class="slide" data-index="1">
                 <div class="slide-content">
-                    <div class="anim-item section-title">三維空間旋轉矩陣</div>
+                    <div class="anim-item section-title">三維空間旋轉與透視投影</div>
                     <div class="anim-item grid-split">
                         <div class="svg-container neon-glow">
                             <svg viewBox="0 0 300 300" class="w-full h-auto">
@@ -221,7 +221,8 @@
                             </svg>
                         </div>
                         <div class="flex flex-col gap-4 text-left">
-                            <div class="code-block neon-glow">
+                            <div class="code-block neon-glow text-[0.95rem] leading-relaxed">
+                                <span class="code-comment"># 1. 尤拉角旋轉矩陣</span><br>
                                 <span class="code-keyword">def</span> <span class="code-func">get_rotation_matrix</span>(p, y, r):<br>
                                 &nbsp;&nbsp;&nbsp;&nbsp;cx, sx = math.cos(p), math.sin(p)<br>
                                 &nbsp;&nbsp;&nbsp;&nbsp;cy, sy = math.cos(y), math.sin(y)<br>
@@ -230,34 +231,21 @@
                                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[cy*cz + sy*sx*sz, -cy*sz + sy*sx*cz, sy*cx],<br>
                                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[cx*sz,            cx*cz,             -sx],<br>
                                 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[-sy*cz + cy*sx*sz, sy*sz + cy*sx*cz, cy*cx]<br>
-                                &nbsp;&nbsp;&nbsp;&nbsp;])
+                                &nbsp;&nbsp;&nbsp;&nbsp;])<br><br>
+                                <span class="code-comment"># 2. 透視投影</span><br>
+                                <span class="code-keyword">def</span> <span class="code-func">project_point</span>(pt, f, cx, cy):<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> (<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int((pt[<span class="code-string">0</span>] * f / pt[<span class="code-string">2</span>]) + cx),<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int((pt[<span class="code-string">1</span>] * f / pt[<span class="code-string">2</span>]) + cy)<br>
+                                &nbsp;&nbsp;&nbsp;&nbsp;) <span class="code-keyword">if</span> pt <span class="code-keyword">is not None and</span> pt[<span class="code-string">2</span>] > <span class="code-string">10.0</span> <span class="code-keyword">else None</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 頁面 2: 三維到二維的透視投影 (原頁面 4) -->
+            <!-- 頁面 2: 線段相交幾何演算法 (原頁面 5) -->
             <div class="slide" data-index="2">
-                <div class="slide-content">
-                    <div class="anim-item section-title">三維到二維的透視投影</div>
-                    <div class="anim-item code-block neon-glow max-w-4xl mt-6">
-                        <span class="code-keyword">def</span> <span class="code-func">project_point</span>(pt, f, cx, cy):<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># x = (X * f / Z) + cx</span><br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># y = (Y * f / Z) + cy</span><br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="code-keyword">return</span> (<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int((pt[<span class="code-string">0</span>] * f / pt[<span class="code-string">2</span>]) + cx),<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;int((pt[<span class="code-string">1</span>] * f / pt[<span class="code-string">2</span>]) + cy)<br>
-                        &nbsp;&nbsp;&nbsp;&nbsp;) <span class="code-keyword">if</span> pt <span class="code-keyword">is not None and</span> pt[<span class="code-string">2</span>] > <span class="code-string">10.0</span> <span class="code-keyword">else None</span>
-                    </div>
-                    <div class="anim-item warning-box neon-glow max-w-4xl mt-6">
-                        <span class="badge badge-warn">[SAFETY]</span> 設定 `pt[2] > 10.0` (Z軸大於 10mm) 是為了避免物體過於靠近相機時造成 <span class="text-orange font-bold">除以零 (Divide by Zero)</span> 的數學崩潰。
-                    </div>
-                </div>
-            </div>
-
-            <!-- 頁面 3: 線段相交幾何演算法 (原頁面 5) -->
-            <div class="slide" data-index="3">
                 <div class="slide-content">
                     <div class="anim-item section-title">線段相交幾何演算法</div>
                     <div class="anim-item grid-split">
@@ -291,8 +279,8 @@
                 </div>
             </div>
 
-            <!-- 頁面 4: 抖動抑制：一歐元濾波器 (合併原頁面 6 與 7) -->
-            <div class="slide" data-index="4">
+            <!-- 頁面 3: 抖動抑制：一歐元濾波器 (合併原頁面 6 與 7) -->
+            <div class="slide" data-index="3">
                 <div class="slide-content">
                     <div class="anim-item section-title">抖動抑制：One Euro Filter</div>
                     <div class="anim-item grid-split">
@@ -318,8 +306,8 @@
                 </div>
             </div>
 
-            <!-- 頁面 5: 雙手交叉手勢時序判定 (合併原頁面 8 與 9) -->
-            <div class="slide" data-index="5">
+            <!-- 頁面 4: 雙手交叉手勢時序判定 (合併原頁面 8 與 9) -->
+            <div class="slide" data-index="4">
                 <div class="slide-content">
                     <div class="anim-item section-title">雙手交叉手勢與時序判定</div>
                     <div class="anim-item grid-split">
@@ -354,8 +342,8 @@
                 </div>
             </div>
 
-            <!-- 頁面 6: 頭部空間姿態與深度估算 (合併原頁面 10 與 11) -->
-            <div class="slide" data-index="6">
+            <!-- 頁面 5: 頭部空間姿態與深度估算 (合併原頁面 10 與 11) -->
+            <div class="slide" data-index="5">
                 <div class="slide-content">
                     <div class="anim-item section-title">頭部空間姿態與深度估算</div>
                     <div class="anim-item grid-split">
@@ -376,7 +364,7 @@
                                 <text x="100" y="140" fill="#ff9a00" font-family="monospace">v_right</text>
                                 <circle cx="140" cy="150" r="15" stroke="#d500ff" stroke-width="3" fill="none"/>
                                 <circle cx="140" cy="150" r="5" fill="#d500ff"/>
-                                <text x="165" y="175" fill="#d500ff" font-family="monospace">v_forward (Out)</text>
+                                <text x="165" y="175" fill="#d500ff" font-family="monospace">v_forward</text>
                             </svg>
                         </div>
                         <div class="flex flex-col gap-4 text-left">
@@ -394,8 +382,8 @@
                 </div>
             </div>
 
-            <!-- 頁面 7: 空間單應性與透視變換 (合併原頁面 12 與 13) -->
-            <div class="slide" data-index="7">
+            <!-- 頁面 6: 空間單應性與透視變換 (合併原頁面 12 與 13) -->
+            <div class="slide" data-index="6">
                 <div class="slide-content">
                     <div class="anim-item section-title">空間單應性與透視變換</div>
                     <div class="anim-item grid-split">
@@ -429,8 +417,8 @@
                 </div>
             </div>
 
-            <!-- 頁面 8: 3D 位姿拖曳狀態管線 (原頁面 14) -->
-            <div class="slide" data-index="8">
+            <!-- 頁面 7: 3D 位姿拖曳狀態管線 (原頁面 14) -->
+            <div class="slide" data-index="7">
                 <div class="slide-content">
                     <div class="anim-item section-title">3D 位姿拖曳狀態管線</div>
                     <div class="anim-item code-block neon-glow max-w-4xl mt-6">
@@ -447,15 +435,15 @@
                 </div>
             </div>
 
-            <!-- 頁面 9: 手部空間姿態解析 (原頁面 16) -->
-            <div class="slide" data-index="9">
+            <!-- 頁面 8: 手部空間姿態解析 (原頁面 16) -->
+            <div class="slide" data-index="8">
                 <div class="slide-content">
                     <div class="anim-item section-title">手部空間姿態解析</div>
                     <div class="anim-item grid-split">
                         <div class="svg-container neon-glow">
                             <svg viewBox="0 0 300 300" class="w-full h-auto">
                                 <path d="M 120 220 L 100 120 L 130 90 L 160 90 L 190 100 L 200 220 Z" stroke="#8a8ca0" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
-                                <circle cx="150" cy="220" r="6" fill="#e0e0ff"/><text x="165" y="230" fill="#e0e0ff" font-family="monospace">0 (Wrist)</text>
+                                <circle cx="150" cy="220" r="6" fill="#e0e0ff"/><text x="165" y="230" fill="#e0e0ff" font-family="monospace">0</text>
                                 <circle cx="150" cy="110" r="6" fill="#00f0ff"/><text x="145" y="95" fill="#00f0ff" font-family="monospace">9</text>
                                 <circle cx="110" cy="120" r="6" fill="#ff9a00"/><text x="90" y="115" fill="#ff9a00" font-family="monospace">5</text>
                                 <circle cx="190" cy="125" r="6" fill="#ff9a00"/><text x="205" y="125" fill="#ff9a00" font-family="monospace">17</text>
@@ -475,7 +463,36 @@
                 </div>
             </div>
 
-            <!-- 頁面 10: 主程式核心：多模型協同運算 (原頁面 19) -->
+            <!-- 頁面 9: 指尖並攏觸控與點擊判定 -->
+            <div class="slide" data-index="9">
+                <div class="slide-content">
+                    <div class="anim-item section-title">指尖並攏觸控與點擊判定</div>
+                    <div class="anim-item grid-split">
+                        <div class="svg-container neon-glow">
+                            <svg viewBox="0 0 300 300" class="w-full h-auto">
+                                <path d="M 120 220 L 100 120 L 130 90 L 160 90 L 190 100 L 200 220 Z" stroke="#8a8ca0" stroke-width="2" fill="none" stroke-dasharray="5,5"/>
+                                <circle cx="150" cy="220" r="6" fill="#e0e0ff"/><text x="165" y="230" fill="#e0e0ff" font-family="monospace">0</text>
+                                <circle cx="135" cy="85" r="6" fill="#00f0ff"/><text x="115" y="80" fill="#00f0ff" font-family="monospace">8</text>
+                                <circle cx="165" cy="85" r="6" fill="#ff9a00"/><text x="175" y="80" fill="#ff9a00" font-family="monospace">12</text>
+                                <circle cx="150" cy="85" r="22" stroke="#d500ff" stroke-width="2" fill="rgba(213,0,255,0.15)" stroke-dasharray="3,2"/>
+                                <text x="100" y="50" fill="#d500ff" font-family="monospace" font-weight="bold">Click Triggered</text>
+                                <line x1="135" y1="85" x2="165" y2="85" stroke="#d500ff" stroke-width="2"/>
+                                <text x="50" y="130" fill="#c0c0d0" font-family="monospace" font-size="12">Distance &lt; 0.22 * palm_dist</text>
+                            </svg>
+                        </div>
+                        <div class="flex flex-col gap-4 text-left">
+                            <div class="code-block neon-glow text-[0.95rem] leading-relaxed">
+                                <span class="code-comment"># 1. 計算食指尖(8)與中指尖(12)的距離</span><br>
+                                click_dist = math.hypot(idx_2d.x - mid_2d.x, idx_2d.y - mid_2d.y)<br><br>
+                                <span class="code-comment"># 2. 以手掌寬度為基準進行歸一化</span><br>
+                                is_click = (click_dist / max(palm_dist, <span class="code-string">1e-6</span>)) &lt; <span class="code-string">0.22</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 頁面 10: 主程式核心：多模型協同運算 -->
             <div class="slide" data-index="10">
                 <div class="slide-content">
                     <div class="anim-item section-title">主程式核心：多模型協同運算</div>
@@ -494,7 +511,7 @@
                 </div>
             </div>
 
-            <!-- 頁面 11: 結語 (原頁面 20) -->
+            <!-- 頁面 11: 結語 -->
             <div class="slide" data-index="11">
                 <div class="slide-content">
                     <div class="anim-item text-7xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#00f0ff] to-[#d500ff] drop-shadow-[0_0_25px_rgba(213,0,255,0.8)] tracking-widest">
